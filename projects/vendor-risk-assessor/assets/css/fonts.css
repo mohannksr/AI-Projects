@@ -1,0 +1,351 @@
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: extra-condensed;
+  font-display: swap;
+  src: url("../fonts/66ead03f7fd2fbfe.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: condensed;
+  font-display: swap;
+  src: url("../fonts/0b6b543503758671.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: semi-condensed;
+  font-display: swap;
+  src: url("../fonts/b88b16925791f33b.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: normal;
+  font-display: swap;
+  src: url("../fonts/24c76040e08d6857.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: semi-expanded;
+  font-display: swap;
+  src: url("../fonts/daf89d15ba25dbb7.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: expanded;
+  font-display: swap;
+  src: url("../fonts/716f9b4f4ae6421b.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 500;
+  font-stretch: extra-condensed;
+  font-display: swap;
+  src: url("../fonts/92ccdf82191692bf.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 500;
+  font-stretch: condensed;
+  font-display: swap;
+  src: url("../fonts/2e33353e352595bf.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 500;
+  font-stretch: semi-condensed;
+  font-display: swap;
+  src: url("../fonts/18fb4f1f8c897ece.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 500;
+  font-stretch: normal;
+  font-display: swap;
+  src: url("../fonts/98feebc75f48e003.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 500;
+  font-stretch: semi-expanded;
+  font-display: swap;
+  src: url("../fonts/4a501a7168c87513.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 500;
+  font-stretch: expanded;
+  font-display: swap;
+  src: url("../fonts/5548145a24220229.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: extra-condensed;
+  font-display: swap;
+  src: url("../fonts/338a3b4908a0fe81.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: condensed;
+  font-display: swap;
+  src: url("../fonts/6106f323ae1efef6.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: semi-condensed;
+  font-display: swap;
+  src: url("../fonts/ce978bf5c7e230d9.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: normal;
+  font-display: swap;
+  src: url("../fonts/a10670bbc2ae0a5c.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: semi-expanded;
+  font-display: swap;
+  src: url("../fonts/58480a56470fd503.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: expanded;
+  font-display: swap;
+  src: url("../fonts/df578c71ffa45bc3.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700;
+  font-stretch: extra-condensed;
+  font-display: swap;
+  src: url("../fonts/b81b65cf64dce2b4.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700;
+  font-stretch: condensed;
+  font-display: swap;
+  src: url("../fonts/72eae4f24f9be21e.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700;
+  font-stretch: semi-condensed;
+  font-display: swap;
+  src: url("../fonts/b3629d9cfea2a40c.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700;
+  font-stretch: normal;
+  font-display: swap;
+  src: url("../fonts/f76a1a3496feab2a.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700;
+  font-stretch: semi-expanded;
+  font-display: swap;
+  src: url("../fonts/6d421b1cc39f18f2.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700;
+  font-stretch: expanded;
+  font-display: swap;
+  src: url("../fonts/f44a8d48a9b785f2.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: extra-condensed;
+  font-display: swap;
+  src: url("../fonts/ba2029e40a19b4c8.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: condensed;
+  font-display: swap;
+  src: url("../fonts/14eb6ac9bc222874.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: semi-condensed;
+  font-display: swap;
+  src: url("../fonts/49accf6f07917a7e.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: normal;
+  font-display: swap;
+  src: url("../fonts/b7e795baed81af44.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: semi-expanded;
+  font-display: swap;
+  src: url("../fonts/1106f619b67b55bf.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: expanded;
+  font-display: swap;
+  src: url("../fonts/f969cbc38660a50c.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 900;
+  font-stretch: extra-condensed;
+  font-display: swap;
+  src: url("../fonts/d92f59fb8d40af91.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 900;
+  font-stretch: condensed;
+  font-display: swap;
+  src: url("../fonts/bd28bc58ba670291.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 900;
+  font-stretch: semi-condensed;
+  font-display: swap;
+  src: url("../fonts/d186da523b1765b8.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 900;
+  font-stretch: normal;
+  font-display: swap;
+  src: url("../fonts/e6f06bee11acb125.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 900;
+  font-stretch: semi-expanded;
+  font-display: swap;
+  src: url("../fonts/7818e9abab2e178c.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 900;
+  font-stretch: expanded;
+  font-display: swap;
+  src: url("../fonts/f1fe9b71f73c530d.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/6d83b1a12212ea9e.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/5f6675d606a21f26.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/622f11306b436832.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/65dbe467fbd37995.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/cb5faad0a7d89532.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/df0ca203057c3630.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/00fc3b213247c853.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/cd052af1c61e3907.ttf") format('truetype');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/39af2c7e72d8cf57.ttf") format('truetype');
+}
