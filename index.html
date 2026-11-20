@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Capstone project index</title>
 <meta name="description" content="An index of 23 hands-on agentic AI projects, grouped by stage, built and documented one by one.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=Instrument+Sans:wght@400;500&amp;display=swap" rel="stylesheet">
 <style>
   :root { --bg:#eef2f7; --ink:#0e1b2c; --muted:#55657a; --line:#c8d2df; --accent:#2d5bff; --tag:#dde5f1; }
   @media (prefers-color-scheme: dark) {
@@ -51,43 +51,43 @@
 <script>
   // Projects you have finished. Add a project's folder name here (for example "trip-buddy/")
   // after you create that folder with its own index.html. Its card then gets an "Open project" link.
-  var DONE = ["projects/vendor-risk-assessor/"];
+  var DONE = ["projects/trip-buddy/", "projects/ai-agents-finance/", "projects/nps-analyst/", "projects/production-rag/", "projects/agentic-rag/", "projects/deep-search-agents/", "projects/vendor-risk-assessor/", "projects/agent-frameworks-fundamental-analysis/", "projects/deep-search-research-agents/", "projects/reasoning-paradigms/", "projects/teams-of-agents/", "projects/agentic-rag-finance/", "projects/prove-it-then-run-it/", "projects/adaptive-learning-app/", "projects/ship-ai-agent-to-aws/", "projects/understand-system-before-deploy/", "projects/deploy-yourself-one-command-at-time/", "projects/automate-push-code-deployment/", "projects/live-auction-house/", "projects/nova-brown-blog-writer/", "projects/ai-tutor-agentic-rag/", "projects/claimsense/", "projects/mini-cursor/"];
   // To edit: change a title, summary or tags below. To add a project, copy one {...} line.
   var GROUPS = [
     { id:"bootcamp", title:"Bootcamp projects", note:"Agents, tools, memory and MCP applied to a trip planner and to finance problems.", items:[
-      { n:1, t:"Trip Buddy", s:"A trip planner for a group of friends. Starts with a database and an LLM, then adds retrieval, tool calling, a ReAct agent and an MCP server.", g:["SQLite","ChromaDB","RAG","MCP"], u:"trip-buddy/" },
-      { n:2, t:"AI agents in finance (sections 1 and 2)", s:"Finance vocabulary, prompting, tool use and memory, ending with a three-agent Buy, Hold or Sell call.", g:["Tool use","Memory","Multi-agent"], u:"finance-section-1/" },
-      { n:3, t:"NPS analyst in a box", s:"A project brief for a five-agent analyst that turns customer survey scores into a money number for a fictional bank.", g:["Multi-agent","Parallel agents"], u:"finance-nps-project/" }
+      { n:1, t:"Trip Buddy", s:"A trip planner for a group of friends. Starts with a database and an LLM, then adds retrieval, tool calling, a ReAct agent and an MCP server.", g:["SQLite","ChromaDB","RAG","MCP"], u:"projects/trip-buddy/" },
+      { n:2, t:"AI agents in finance (sections 1 and 2)", s:"Finance vocabulary, prompting, tool use and memory, ending with a three-agent Buy, Hold or Sell call.", g:["Tool use","Memory","Multi-agent"], u:"projects/ai-agents-finance/" },
+      { n:3, t:"NPS analyst in a box", s:"A project brief for a five-agent analyst that turns customer survey scores into a money number for a fictional bank.", g:["Multi-agent","Parallel agents"], u:"projects/nps-analyst/" }
     ]},
     { id:"rag", title:"RAG and research courses", note:"Three courses, each building a piece the capstone needs. Do them in order.", items:[
-      { n:4, t:"Production RAG from scratch", s:"Takes a Q&A assistant for an online store from messy documents to production: extraction, chunking, hybrid search, reranking, citations, evaluation and cost.", g:["RAG","Reranking","Evaluation"], u:"production-rag/" },
-      { n:5, t:"Agentic RAG", s:"An agent team that routes a question, retrieves from a PDF or the web, and grades its own answers.", g:["CrewAI","Routing","Grading"], u:"agentic-rag/" },
-      { n:6, t:"Deep search agents", s:"A research agent that plans, searches in parallel, checks sources, resists prompt injection and merges the evidence.", g:["Planning","Web search","Safety"], u:"deep-search-agents/" }
+      { n:4, t:"Production RAG from scratch", s:"Takes a Q&A assistant for an online store from messy documents to production: extraction, chunking, hybrid search, reranking, citations, evaluation and cost.", g:["RAG","Reranking","Evaluation"], u:"projects/production-rag/" },
+      { n:5, t:"Agentic RAG", s:"An agent team that routes a question, retrieves from a PDF or the web, and grades its own answers.", g:["CrewAI","Routing","Grading"], u:"projects/agentic-rag/" },
+      { n:6, t:"Deep search agents", s:"A research agent that plans, searches in parallel, checks sources, resists prompt injection and merges the evidence.", g:["Planning","Web search","Safety"], u:"projects/deep-search-agents/" }
     ]},
     { id:"capstone", title:"The capstone", note:"Joins projects 4, 5 and 6 into one product, with a human approving every result.", items:[
       { n:7, t:"AI vendor risk assessor", s:"Answers whether a team can use an AI tool with customer data. Combines a policy library, web research on the vendor and a human approval step.", g:["RAG","Deep search","Human in the loop"], u:"projects/vendor-risk-assessor/" }
     ]},
     { id:"week3", title:"AWS Week 3 projects", note:"The rest of the finance course, a system design case study and an agent shipped to AWS.", items:[
-      { n:8, t:"Agent frameworks and fundamental analysis", s:"Compares agent frameworks and builds a five-agent system for fundamental analysis.", g:["Frameworks","Multi-agent"], u:"finance-part-2-frameworks/" },
-      { n:9, t:"Deep search research agents", s:"A research desk that searches in parallel, verifies results with code and writes a memo.", g:["Deep search","Code checks"], u:"finance-part-3-deep-search/" },
-      { n:10, t:"Reasoning paradigms", s:"Seven ways an agent can think before acting, each applied to the same earnings-week task.", g:["ReAct","Reflexion","Tree of thoughts"], u:"finance-part-4-reasoning/" },
-      { n:11, t:"Teams of agents", s:"When to use a team instead of one agent. Builds an investment committee and a claims pipeline.", g:["LangGraph","Hand-offs","Debate"], u:"finance-part-5-teams/" },
-      { n:12, t:"Agentic RAG in finance", s:"One compliance question answered eight ways, one for each agentic retrieval pattern.", g:["Agentic RAG","Long filings"], u:"finance-part-6-agentic-rag/" },
-      { n:13, t:"Prove it, then run it", s:"An evaluation harness with a release gate for a KYC agent, plus tracing and guardrails.", g:["Evaluation","Guardrails","Tracing"], u:"finance-part-7-production/" },
-      { n:14, t:"Designing an adaptive learning app", s:"A system design case study: APIs, data model and caching for personalised lessons at scale.", g:["System design","Caching","LLM cost"], u:"adaptive-learning-case-study/" },
-      { n:15, t:"Ship an AI agent to AWS", s:"The overview for deploying an inventory agent as a public app on AWS.", g:["AWS","Gradio","FastAPI"], u:"inventory-aws-start/" },
-      { n:16, t:"Understand the system before you deploy it", s:"A code tour of the inventory agent and the AWS services it runs on.", g:["ECS Fargate","ECR","EFS"], u:"inventory-aws-understand/" },
-      { n:17, t:"Deploy it yourself, one command at a time", s:"Deploys the agent from an empty AWS account to a public URL using the CLI, then cleans up.", g:["AWS CLI","ECS Fargate"], u:"inventory-aws-deploy/" },
-      { n:18, t:"Automate it with GitHub Actions", s:"A pipeline that redeploys the agent on every push, using GitHub’s OIDC login to AWS.", g:["CI/CD","GitHub Actions"], u:"inventory-aws-github-actions/" }
+      { n:8, t:"Agent frameworks and fundamental analysis", s:"Compares agent frameworks and builds a five-agent system for fundamental analysis.", g:["Frameworks","Multi-agent"], u:"projects/agent-frameworks-fundamental-analysis/" },
+      { n:9, t:"Deep search research agents", s:"A research desk that searches in parallel, verifies results with code and writes a memo.", g:["Deep search","Code checks"], u:"projects/deep-search-research-agents/" },
+      { n:10, t:"Reasoning paradigms", s:"Seven ways an agent can think before acting, each applied to the same earnings-week task.", g:["ReAct","Reflexion","Tree of thoughts"], u:"projects/reasoning-paradigms/" },
+      { n:11, t:"Teams of agents", s:"When to use a team instead of one agent. Builds an investment committee and a claims pipeline.", g:["LangGraph","Hand-offs","Debate"], u:"projects/teams-of-agents/" },
+      { n:12, t:"Agentic RAG in finance", s:"One compliance question answered eight ways, one for each agentic retrieval pattern.", g:["Agentic RAG","Long filings"], u:"projects/agentic-rag-finance/" },
+      { n:13, t:"Prove it, then run it", s:"An evaluation harness with a release gate for a KYC agent, plus tracing and guardrails.", g:["Evaluation","Guardrails","Tracing"], u:"projects/prove-it-then-run-it/" },
+      { n:14, t:"Designing an adaptive learning app", s:"A system design case study: APIs, data model and caching for personalised lessons at scale.", g:["System design","Caching","LLM cost"], u:"projects/adaptive-learning-app/" },
+      { n:15, t:"Ship an AI agent to AWS", s:"The overview for deploying an inventory agent as a public app on AWS.", g:["AWS","Gradio","FastAPI"], u:"projects/ship-ai-agent-to-aws/" },
+      { n:16, t:"Understand the system before you deploy it", s:"A code tour of the inventory agent and the AWS services it runs on.", g:["ECS Fargate","ECR","EFS"], u:"projects/understand-system-before-deploy/" },
+      { n:17, t:"Deploy it yourself, one command at a time", s:"Deploys the agent from an empty AWS account to a public URL using the CLI, then cleans up.", g:["AWS CLI","ECS Fargate"], u:"projects/deploy-yourself-one-command-at-time/" },
+      { n:18, t:"Automate it with GitHub Actions", s:"A pipeline that redeploys the agent on every push, using GitHub’s OIDC login to AWS.", g:["CI/CD","GitHub Actions"], u:"projects/automate-push-code-deployment/" }
     ]},
     { id:"coding", title:"Build with AI coding agents", note:"One real app built end to end by an AI coding agent while you plan and review.", items:[
-      { n:19, t:"Live Auction House", s:"A real-time auction site where simultaneous bids can’t both win. Built in three parts with Codex and Claude Code.", g:["React","PostgreSQL","Redis","RabbitMQ"], u:"live-auction-setup/" }
+      { n:19, t:"Live Auction House", s:"A real-time auction site where simultaneous bids can’t both win. Built in three parts with Codex and Claude Code.", g:["React","PostgreSQL","Redis","RabbitMQ"], u:"projects/live-auction-house/" }
     ]},
     { id:"portfolio", title:"Agentic AI portfolio projects", note:"Four interview-style projects, from easiest to biggest: Mini Cursor, AI Tutor, Nova and Brown, ClaimSense.", items:[
-      { n:20, t:"Nova and Brown: a multi-agent blog writer", s:"One agent researches a topic, another writes and edits in your voice. Both run as MCP servers.", g:["LangGraph","FastMCP","Opik"], u:"nova-brown-problem/" },
-      { n:21, t:"AI Tutor with agentic RAG", s:"A tutor for a course forum that answers from the lessons, cites them and says when it doesn’t know.", g:["LangGraph","ChromaDB","FastAPI"], u:"ai-tutor-problem/" },
-      { n:22, t:"ClaimSense: an insurance claims agent", s:"Reads claim documents, decides coverage from the policy, flags suspicious claims and leaves rejections for a human.", g:["LangGraph","Terraform","ECS Fargate"], u:"claimsense-problem/" },
-      { n:23, t:"Mini Cursor: a coding agent in your terminal", s:"A small agent loop that reads, edits and runs code, with guards on the files it can touch.", g:["Function calling","pytest"], u:"mini-cursor-problem/" }
+      { n:20, t:"Nova and Brown: a multi-agent blog writer", s:"One agent researches a topic, another writes and edits in your voice. Both run as MCP servers.", g:["LangGraph","FastMCP","Opik"], u:"projects/nova-brown-blog-writer/" },
+      { n:21, t:"AI Tutor with agentic RAG", s:"A tutor for a course forum that answers from the lessons, cites them and says when it doesn’t know.", g:["LangGraph","ChromaDB","FastAPI"], u:"projects/ai-tutor-agentic-rag/" },
+      { n:22, t:"ClaimSense: an insurance claims agent", s:"Reads claim documents, decides coverage from the policy, flags suspicious claims and leaves rejections for a human.", g:["LangGraph","Terraform","ECS Fargate"], u:"projects/claimsense/" },
+      { n:23, t:"Mini Cursor: a coding agent in your terminal", s:"A small agent loop that reads, edits and runs code, with guards on the files it can touch.", g:["Function calling","pytest"], u:"projects/mini-cursor/" }
     ]}
   ];
 

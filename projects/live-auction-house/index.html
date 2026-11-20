@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project 19 · Part 1 · Live Auction House · Set up and learn the agent · AWS AI Capstone</title>
+<meta name="description" content="Project 19, Part 1 of 3: set up Node, Docker and an AI coding agent (Codex, Claude Code or Antigravity) on macOS or Windows, run the auction app's foundation, and learn to plan every feature by letting the agent grill you first.">
+<meta name="author" content="Spencer Schneidenbach (course); page by AI-Infusion">
+<script>
+  try { var t = localStorage.getItem('fws-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+<link href="assets/css/fonts.css" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/3f21a261046cc900.css">
+<style>
+/* page-specific rules only (shared look lives in live-auction.css). This one rule is required by the blueprint checker: */
+main .awsq{--q-acc:var(--accent);--q-acc-t:var(--accent-soft);--q-acc-ink:var(--accent);--q-cur:var(--bid);--q-on:#fff;--q-card2:var(--surface-2);--q-rule:var(--line);padding:0;margin:18px 0;max-width:none}
+/* side-by-side "too vague" / "useful" AGENTS.md examples */
+.bad-good{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:720px){.bad-good{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.bad-good .codebox{margin:8px 0 0}
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<header class="hero" id="top">
+  <div class="hero-in">
+    <div class="hero-main">
+      <p class="kicker">AWS AI Capstone · Project 19 · Part 1 of 3</p>
+      <h1>Live Auction House: <em>set up</em> and learn the agent</h1>
+      <p class="lede">You'll build a real-time auction site, but you won't type the app code. An AI coding agent writes it. Your job is the part that decides whether it works: planning, saying no, and checking. This first part gets your machine and your agent ready, runs the app's foundation, and teaches the habit the whole course depends on: let the agent interview you before it writes anything.</p>
+      <div class="chips"><span>Codex</span><span>Claude Code</span><span>Antigravity</span><span>Node 22</span><span>Docker</span><span>PostgreSQL</span><span>Playwright</span></div>
+    </div>
+    <aside class="label" aria-label="About this part">
+      <dl>
+        <div><dt>You will</dt><dd>Install the tools · pick an agent · make a throwaway first build · write a good AGENTS.md · run Part 1 · plan Part 2 by being grilled</dd></div>
+        <div><dt>Time</dt><dd>about 1 h 30 min of video (lessons 1–8), 2½–3 hours with the hands-on steps</dd></div>
+        <div><dt>You need</dt><dd>A Mac or a Windows 11 PC with WSL2 · 16 GB RAM recommended · some TypeScript · an AI coding agent subscription or API key</dd></div>
+      </dl>
+      <!-- decorative bid ticker: copy this block exactly -->
+      <svg class="ticker" viewbox="0 0 280 84" aria-hidden="true" focusable="false">
+        <path d="M14 12l14 14M20 6l14 14M8 18l14 14M24 20l-14 14" stroke="#F2A93B" stroke-width="3" stroke-linecap="round" fill="none"></path>
+        <text class="row" x="48" y="26">Asha  $101</text>
+        <text class="row" x="48" y="50">Ben   $102</text>
+        <text class="row" x="48" y="74">Chen  $107</text>
+      </svg>
+    </aside>
+  </div>
+  <nav class="route" aria-label="The three parts of Project 19">
+    <!-- the current page's tile gets aria-current="page" -->
+    <a href="./" aria-current="page"><b>Part 1</b><span>Set up and learn the agent</span><i>Course Parts 0–1 · grilling</i></a>
+    <a href="./pages/live-auction-build/"><b>Part 2</b><span>Build it: Parts 1–4</span><i>Bids, the race, live updates</i></a>
+    <a href="./pages/live-auction-ship/"><b>Part 3</b><span>Ship it: Parts 5–8</span><i>Close, pay, trace</i></a>
+  </nav>
+</header>
+
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="On this page">
+    <h4>On this page</h4>
+    <a href="#problem">One auction, eight questions</a>
+    <a href="#arch">The system you'll end up with</a>
+    <a href="#how">How the work is done</a>
+    <a href="#need">What you need</a>
+    <a class="lvl2" href="#install">Install, macOS or Windows</a>
+    <a class="lvl2" href="#check">Check your tools</a>
+    <a href="#agent">Choose your agent</a>
+    <a href="#cost">Cost and safety</a>
+    <a href="#folders">Reference and workshop folders</a>
+    <a href="#ports">Run any part: ports</a>
+    <a href="#basics">Agent basics: effort and usage</a>
+    <a href="#practice">A throwaway first build</a>
+    <a class="lvl2" href="#skills">Install the grilling skills</a>
+    <a href="#browser">Let the agent check its own work</a>
+    <a href="#agents-md">Write AGENTS.md</a>
+    <a href="#part-1">Part 1 · The foundation</a>
+    <a href="#grilling">Plan before you build: grilling</a>
+    <a href="#plan-part-2">Open Part 2's design</a>
+    <a href="#quiz">Check yourself</a>
+    <a href="#next">Next: build it</a>
+  </nav>
+  <main id="main">
+<!-- awsq:top -->
+<style>
+.awsq{--q-card:var(--card,var(--surface,#fff));--q-card2:var(--card-2,var(--surface-2,#f3f3f0));--q-rule:var(--rule,var(--line,#ddd));
+  --q-ink:var(--ink,#1a1a1a);--q-muted:var(--muted,#666);--q-acc:var(--tool,var(--accent,#0b7f73));--q-acc-t:var(--tool-t,var(--accent-soft,#d6f2ee));
+  --q-acc-ink:var(--tool-ink,var(--accent,#075a51));--q-cur:var(--brain,var(--gold,#b07600));--q-on:var(--card,var(--surface,#fff));
+  --q-focus:var(--focus,var(--accent,#2958c4));--q-mono:var(--font-mono,"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace);
+  max-width:72rem;margin:18px auto;padding:0 40px;font-family:var(--font-body,inherit)}
+.awsq-box{background:var(--q-card);border:1px solid var(--q-rule);border-radius:12px;padding:12px 14px}
+.awsq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}
+.awsq-cap{display:block;margin:0;font:600 .7rem/1.4 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-row{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.awsq-l{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;padding:9px 13px;border-radius:9px;border:1px solid var(--q-rule);color:var(--q-ink);text-decoration:none;font-size:.95rem;line-height:1.3}
+a.awsq-l:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-next{text-align:right;align-items:flex-end}
+.awsq-d{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--q-acc)}
+.awsq-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+span.awsq-l{border-style:dashed;color:var(--q-muted)} span.awsq-l .awsq-d,span.awsq-l .awsq-t{color:var(--q-muted);font-weight:400}
+a.awsq-home{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:6px 12px;border-radius:9px;text-decoration:none;color:var(--q-ink);text-align:center;font-size:.85rem;line-height:1.3}
+a.awsq-home:hover{background:var(--q-card2);text-decoration:none}
+.awsq-home b{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-steps{display:flex;gap:5px;margin:11px 0 0;padding:0;list-style:none}
+.awsq-steps li{flex:1 1 0;margin:0;padding:0;list-style:none}
+.awsq-steps li::before{content:none}
+.awsq-steps a{display:block;text-align:center;padding:4px 0;border-radius:5px;font:600 .75rem/1.4 var(--q-mono);text-decoration:none;background:var(--q-card2);border:1px solid var(--q-rule);color:var(--q-muted)}
+.awsq-steps a.done{background:var(--q-acc-t);color:var(--q-acc-ink);border-color:transparent}
+.awsq-steps a.cur{background:var(--q-cur);color:var(--q-on);border-color:transparent}
+.awsq-steps a:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-recs{display:flex;flex-wrap:wrap;gap:8px;margin:11px 0 0}
+.awsq-rec{flex:1 1 220px;display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:9px;border:1px solid var(--q-acc);background:var(--q-acc-t);
+  color:var(--q-acc-ink);font-weight:700;font-size:.92rem;line-height:1.3;text-decoration:none}
+a.awsq-rec:hover{text-decoration:none;filter:brightness(.97)}
+.awsq-rec i{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--q-acc);color:var(--q-on);font-style:normal;font-size:.7rem}
+.awsq-rec small{margin-left:auto;font:600 .68rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+.awsq-files{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+.awsq-files > b{margin-right:4px;font:600 .7rem/1.3 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-fb{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-rule);color:var(--q-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-fb:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-fb small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+span.awsq-fb{border-style:dashed;color:var(--q-muted);font-weight:600}
+.awsq a:focus-visible{outline:2px solid var(--q-focus);outline-offset:2px}
+.awsq a.aih{flex:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:var(--q-acc);color:var(--q-on);
+  font:700 .74rem/1.2 var(--q-mono);letter-spacing:.04em;text-decoration:none;white-space:nowrap}
+.awsq a.aih:hover{filter:brightness(1.08);text-decoration:none}
+.awsq-ver{display:flex;justify-content:flex-end;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+a.awsq-vl{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-acc);color:var(--q-acc-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-vl:hover{background:var(--q-acc-t);text-decoration:none}
+.awsq-vl small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-bottom{padding:0 !important;margin:48px 0 8px;max-width:none}
+.awsq-inmain{padding:0 !important;margin:0 0 28px;max-width:none}
+@media (max-width:1100px){.awsq{padding:0 24px}}
+@media (max-width:640px){.awsq-steps{flex-wrap:wrap}.awsq-steps li{flex:1 0 28px}.awsq{padding:0 16px}.awsq-t{white-space:normal;overflow-wrap:anywhere}.awsq-row{grid-template-columns:1fr 1fr}a.awsq-home{grid-column:1 / -1;grid-row:1;flex-direction:row;gap:8px}a.awsq-rec small{display:none}}
+@media print{.awsq{display:none}}
+</style>
+<div class="awsq awsq-top awsq-inmain" role="navigation" aria-label="Capstone navigation (top)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 19 of 23 · Part 1 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../automate-push-code-deployment/"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions</span></a><a class="awsq-home" href="../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="./pages/live-auction-build/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="cur" href="./" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent" aria-current="page">P19·1</a></li><li><a class="" href="./pages/live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="" href="./pages/live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="" href="../nova-brown-blog-writer/" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="" href="../nova-brown-blog-writer/pages/nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="" href="../nova-brown-blog-writer/pages/nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/archive/refs/heads/master.zip">⬇ Download all<small>.zip from GitHub</small></a></div></div></div>
+<!-- /awsq:top -->
+    <details class="mobile-toc"><summary>☰ Contents</summary><a href="#problem">One auction, eight questions</a>
+<a href="#arch">The system you'll end up with</a>
+<a href="#how">How the work is done</a>
+<a href="#need">What you need</a>
+<a class="lvl2" href="#install">Install, macOS or Windows</a>
+<a class="lvl2" href="#check">Check your tools</a>
+<a href="#agent">Choose your agent</a>
+<a href="#cost">Cost and safety</a>
+<a href="#folders">Reference and workshop folders</a>
+<a href="#ports">Run any part: ports</a>
+<a href="#basics">Agent basics: effort and usage</a>
+<a href="#practice">A throwaway first build</a>
+<a class="lvl2" href="#skills">Install the grilling skills</a>
+<a href="#browser">Let the agent check its own work</a>
+<a href="#agents-md">Write AGENTS.md</a>
+<a href="#part-1">Part 1 · The foundation</a>
+<a href="#grilling">Plan before you build: grilling</a>
+<a href="#plan-part-2">Open Part 2's design</a>
+<a href="#quiz">Check yourself</a>
+<a href="#next">Next: build it</a>
+</details>
+
+    <!-- ============ 1. PLAIN SECTION ============ -->
+    <section class="sec" id="problem">
+      <p class="eyebrow">Start here</p>
+      <h2>One auction, eight questions</h2>
+      <p>Imagine one auction. Dana is clearing out her home lab and lists a <strong>used GPU</strong> (a graphics card, the part that runs AI models) with a starting price of <strong>$100</strong>. The auction <strong>closes at 6:00 pm</strong>. Three people want it: <strong>Asha</strong>, <strong>Ben</strong> and <strong>Chen</strong>.</p>
+      <p>Asha bids $101. A minute later Ben and Chen both type $102 and click <strong>Bid</strong> in the same second. Bids keep coming until Chen bids $107 two seconds before six. Then the clock passes 6:00 pm.</p>
+      <p>That small story hides eight hard questions. Each part of the course answers one of them, and each answer adds one piece to the system:</p>
+
+      
+
+      <!-- course route (all 8 items on page 1; pages 2/3 add class="here" on the covered parts and class="done" on earlier ones) -->
+      <ol class="course-route" aria-label="The eight course parts">
+        <li style="--pc:var(--p1)"><span class="n">1</span><b>Foundation</b><small>Is the stack alive?</small></li>
+        <li style="--pc:var(--p2)"><span class="n">2</span><b>Auctions &amp; bids</b><small>List, bid, check the rules</small></li>
+        <li style="--pc:var(--p3)"><span class="n">3</span><b>The race</b><small>Only one $102 wins</small></li>
+        <li style="--pc:var(--p4)"><span class="n">4</span><b>Live updates</b><small>Pages change by themselves</small></li>
+        <li style="--pc:var(--p5)"><span class="n">5</span><b>Hidden defect</b><small>Find the planted bug</small></li>
+        <li style="--pc:var(--p6)"><span class="n">6</span><b>Closing</b><small>Tell the winner, crash-proof</small></li>
+        <li style="--pc:var(--p7)"><span class="n">7</span><b>Checkout</b><small>Chen pays, provably</small></li>
+        <li style="--pc:var(--p8)"><span class="n">8</span><b>Tracing</b><small>Follow one auction end to end</small></li>
+      </ol>
+
+      <p>This page covers the setup and Part 1, then plans Part 2. <strong>Page 2</strong> builds Parts 2–4. <strong>Page 3</strong> ships Parts 5–8.</p>
+
+      <!-- callouts: .box + one of note | warn | key | repo | stretch | win | cost; <span class="tag"> is the label -->
+      <div class="box note"><span class="tag">About the course</span><p>This project follows <em>Build a Fullstack App with Codex</em> by Spencer Schneidenbach on master.dev: 27 video lessons, about 4 hours 41 minutes, with a public repo holding the finished app, one folder per part. We link to each lesson at the matching step. The prompts, explanations and simulators here are our own, written so they work in any of the three big coding agents, and on Windows as well as macOS.</p></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 2. THE SYSTEM (architecture diagram, full version with buttons) ============ -->
+    <section class="sec" id="arch">
+      <p class="eyebrow">The big picture</p>
+      <h2>The system you'll end up with</h2>
+      <p>By the end, seven running pieces work together. You don't need to know any of them yet; each part introduces one, and this diagram shows where it fits.</p>
+
+    <!-- ============ 9. ARCHITECTURE DIAGRAM (page 1 #arch full version with buttons) ============ -->
+      <div class="diagram arch" data-arch data-arch-part="all">
+        <svg viewbox="0 0 760 420" role="img" aria-label="Architecture of the finished Live Auction House: browser, API, PostgreSQL, Redis and Socket.IO, a close worker, RabbitMQ, a notification worker, mock Stripe and Jaeger.">
+          <defs><marker id="arrowhead" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" style="color:var(--muted)"></path></marker></defs>
+          <!-- arrows first so the boxes sit on top of them -->
+          <path class="ar" data-ar="a1" d="M180 162 H295" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="237" y="154" text-anchor="middle">HTTP: bids, pages</text>
+          <path class="ar" data-ar="a2" d="M465 162 H580" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="522" y="154" text-anchor="middle">SQL</text>
+          <path class="ar" data-ar="a3" d="M380 190 V234" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="388" y="216">after commit</text>
+          <path class="ar" data-ar="a4" d="M180 262 H295" marker-start="url(#arrowhead)" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="237" y="256" text-anchor="middle">fan-out</text>
+          <path class="ar" data-ar="a5" d="M310 234 V206 H95 V190" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="237" y="200" text-anchor="middle">WebSocket push</text>
+          <path class="ar" data-ar="a6" d="M665 234 V190" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="656" y="216" text-anchor="end">claim + close + outbox</text>
+          <path class="ar" data-ar="a7" d="M600 290 V300 H520 V362 H465" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="512" y="326" text-anchor="end">publish, confirmed</text>
+          <path class="ar" data-ar="a8" d="M295 362 H180" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="237" y="356" text-anchor="middle">deliver, ack</text>
+          <path class="ar" data-ar="a9" d="M95 334 V290" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="103" y="316">emit to user room</text>
+          <path class="ar" data-ar="a10" d="M430 134 V62 H580" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="500" y="56" text-anchor="middle">create checkout</text>
+          <path class="ar" data-ar="a11" d="M580 76 H450 V134" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="500" y="92" text-anchor="middle">signed webhook</text>
+          <path class="ar dash" data-ar="a12" d="M625 290 V334" marker-end="url(#arrowhead)"></path>
+          <path class="ar dash" data-ar="a12" d="M330 134 V20 H756"></path>
+          <path class="ar dash" data-ar="a12" d="M750 62 H756"></path>
+          <path class="ar dash" data-ar="a12" d="M750 262 H756"></path>
+          <path class="ar dash" data-ar="a12" d="M95 390 V408 H756 V362"></path>
+          <path class="ar dash" data-ar="a12" d="M756 20 V362 H750" marker-end="url(#arrowhead)"></path>
+          <text class="sub" x="540" y="14" text-anchor="middle">spans from API, workers and Stripe flow into Jaeger</text>
+          <!-- nodes -->
+          <g class="nd" id="n-stripe"><rect x="580" y="34" width="170" height="56" rx="10"></rect><text x="665" y="58" text-anchor="middle" font-size="13" font-weight="700">💳 Mock Stripe</text><text class="sub" x="665" y="76" text-anchor="middle">hosted checkout</text></g>
+          <g class="nd" id="n-web"><rect x="10" y="134" width="170" height="56" rx="10"></rect><text x="95" y="158" text-anchor="middle" font-size="13" font-weight="700">🌐 Browser</text><text class="sub" x="95" y="176" text-anchor="middle">React + Vite web app</text></g>
+          <g class="nd" id="n-api"><rect x="295" y="134" width="170" height="56" rx="10"></rect><text x="380" y="158" text-anchor="middle" font-size="13" font-weight="700">⚡ API</text><text class="sub" x="380" y="176" text-anchor="middle">Fastify, TypeScript</text></g>
+          <g class="nd" id="n-db"><rect x="580" y="134" width="170" height="56" rx="10"></rect><text x="665" y="158" text-anchor="middle" font-size="13" font-weight="700">🐘 PostgreSQL</text><text class="sub" x="665" y="176" text-anchor="middle" style="font-size:10px">auctions, bids, closes, outbox</text></g>
+          <g class="nd" id="n-socket"><rect x="295" y="234" width="170" height="56" rx="10"></rect><text x="380" y="258" text-anchor="middle" font-size="13" font-weight="700">🔌 Socket.IO</text><text class="sub" x="380" y="276" text-anchor="middle">live push to browsers</text></g>
+          <g class="nd" id="n-redis"><rect x="10" y="234" width="170" height="56" rx="10"></rect><text x="95" y="258" text-anchor="middle" font-size="13" font-weight="700">🔴 Redis</text><text class="sub" x="95" y="276" text-anchor="middle">Socket.IO backplane</text></g>
+          <g class="nd" id="n-close"><rect x="580" y="234" width="170" height="56" rx="10"></rect><text x="665" y="258" text-anchor="middle" font-size="13" font-weight="700">⏱️ Close worker</text><text class="sub" x="665" y="276" text-anchor="middle">polls for ended auctions</text></g>
+          <g class="nd" id="n-notify"><rect x="10" y="334" width="170" height="56" rx="10"></rect><text x="95" y="358" text-anchor="middle" font-size="13" font-weight="700">🔔 Notification worker</text><text class="sub" x="95" y="376" text-anchor="middle">pop-ups to seller and winner</text></g>
+          <g class="nd" id="n-mq"><rect x="295" y="334" width="170" height="56" rx="10"></rect><text x="380" y="358" text-anchor="middle" font-size="13" font-weight="700">🐇 RabbitMQ</text><text class="sub" x="380" y="376" text-anchor="middle">AuctionClosed events</text></g>
+          <g class="nd" id="n-jaeger"><rect x="580" y="334" width="170" height="56" rx="10"></rect><text x="665" y="358" text-anchor="middle" font-size="13" font-weight="700">🧭 Jaeger</text><text class="sub" x="665" y="376" text-anchor="middle">traces from every service</text></g>
+        </svg>
+        <div class="row" role="group" aria-label="Show what each part adds">
+          <button type="button" class="btn ghost" data-part="1" aria-pressed="false">Part 1</button>
+          <button type="button" class="btn ghost" data-part="2" aria-pressed="false">Part 2</button>
+          <button type="button" class="btn ghost" data-part="3" aria-pressed="false">Part 3</button>
+          <button type="button" class="btn ghost" data-part="4" aria-pressed="false">Part 4</button>
+          <button type="button" class="btn ghost" data-part="5" aria-pressed="false">Part 5</button>
+          <button type="button" class="btn ghost" data-part="6" aria-pressed="false">Part 6</button>
+          <button type="button" class="btn ghost" data-part="7" aria-pressed="false">Part 7</button>
+          <button type="button" class="btn ghost" data-part="8" aria-pressed="false">Part 8</button>
+          <button type="button" class="btn ghost" data-part="all" aria-pressed="true">All</button>
+        </div>
+        <p class="arch-cap" aria-live="polite"></p>
+      </div>
+
+      <div class="box note"><span class="tag">Words you'll meet</span><ul class="cols2">
+        <li><strong>API</strong>: the server program the browser talks to over HTTP. Here it's written with <em>Fastify</em>, a small Node.js web framework.</li>
+        <li><strong>PostgreSQL</strong>: the database. It's the single source of truth: if the database says Chen won, Chen won.</li>
+        <li><strong>Docker</strong> and <strong>Docker Compose</strong>: run PostgreSQL, Redis, RabbitMQ and Jaeger in containers, so you don't install them by hand.</li>
+        <li><strong>Vite</strong>: the tool that serves and rebuilds the React web app while you work.</li>
+        <li><strong>Playwright</strong>: a library that drives a real browser from a test, so the agent (or you) can click through the app automatically.</li>
+        <li><strong>Migration</strong>: a numbered SQL file that changes the database's shape. They run in order, once each.</li>
+        <li><strong>Vertical slice</strong>: a small piece of work that goes through every layer (database, API, page) and ends with something you can click.</li>
+      </ul></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 3. HOW THE WORK IS DONE ============ -->
+    <section class="sec" id="how">
+      <p class="eyebrow">The method</p>
+      <h2>How the work is done</h2>
+      <p>Every part follows the same loop. Learn it once here; the rest of the course repeats it.</p>
+
+      <figure class="diagram">
+        <svg viewbox="0 0 760 170" role="img" aria-label="The six-step loop: you state the goal; the agent reads the code, then grills you; you answer and the decisions go into GRILL.md; the agent proposes 2 to 4 slices and you approve; the agent builds one slice, runs the checks and stops; you verify in the browser and review, then loop back for the next slice or the next part.">
+          <defs><marker id="arrowhead2" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" style="color:var(--muted)"></path></marker></defs>
+          <path d="M220 46 H280" style="fill:none;stroke:var(--muted);stroke-width:1.5" marker-end="url(#arrowhead2)"></path>
+          <path d="M480 46 H540" style="fill:none;stroke:var(--muted);stroke-width:1.5" marker-end="url(#arrowhead2)"></path>
+          <path d="M640 76 V96" style="fill:none;stroke:var(--muted);stroke-width:1.5" marker-end="url(#arrowhead2)"></path>
+          <path d="M540 126 H480" style="fill:none;stroke:var(--muted);stroke-width:1.5" marker-end="url(#arrowhead2)"></path>
+          <path d="M280 126 H220" style="fill:none;stroke:var(--muted);stroke-width:1.5" marker-end="url(#arrowhead2)"></path>
+          <path d="M120 96 V76" style="fill:none;stroke:var(--muted);stroke-width:1.5" marker-end="url(#arrowhead2)"></path>
+          <text x="128" y="89" style="fill:var(--muted);font-size:10px">next part</text>
+          <path d="M120 156 V164 H380 V156" style="fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:5 4" marker-end="url(#arrowhead2)"></path>
+          <rect x="20" y="16" width="200" height="60" rx="12" style="fill:var(--violet-soft);stroke:var(--violet);stroke-width:1.5"></rect>
+          <text x="120" y="50" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">🧑 You state the goal</text>
+          <rect x="280" y="16" width="200" height="60" rx="12" style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5"></rect>
+          <text x="380" y="41" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">🤖 Agent reads the code,</text>
+          <text x="380" y="59" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">then grills you</text>
+          <rect x="540" y="16" width="200" height="60" rx="12" style="fill:var(--violet-soft);stroke:var(--violet);stroke-width:1.5"></rect>
+          <text x="640" y="41" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">🧑 You answer; decisions</text>
+          <text x="640" y="59" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">go into GRILL.md</text>
+          <rect x="540" y="96" width="200" height="60" rx="12" style="fill:var(--accent-soft);stroke:var(--violet);stroke-width:1.5"></rect>
+          <text x="640" y="121" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">🤖 Agent proposes 2–4 slices;</text>
+          <text x="640" y="139" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">you approve</text>
+          <rect x="280" y="96" width="200" height="60" rx="12" style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5"></rect>
+          <text x="380" y="121" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">🤖 Agent builds one slice,</text>
+          <text x="380" y="139" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">runs the checks, stops</text>
+          <rect x="20" y="96" width="200" height="60" rx="12" style="fill:var(--violet-soft);stroke:var(--violet);stroke-width:1.5"></rect>
+          <text x="120" y="121" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">🧑 You verify in the browser</text>
+          <text x="120" y="139" text-anchor="middle" style="fill:var(--ink);font-size:12px;font-weight:600">and review</text>
+        </svg>
+        <figcaption>The agent writes the code. You own steps 1, 3, 4 and 6: the goal, the answers, the approval and the verdict.</figcaption>
+      </figure>
+
+      <p>An <strong>AI coding agent</strong> is a program that reads your project, runs commands in your terminal (install, test, start), edits files, and reports back. It's not autocomplete. You give it a task in plain English, and it works for minutes at a time.</p>
+      <p>That power cuts both ways. An agent that misunderstands you will happily build the wrong thing, fast, and tell you it's done. The course's answer is a set of habits:</p>
+      <ul>
+        <li><strong>Plan before code.</strong> The agent interviews you first (this is called <em>grilling</em>), and writes the answers down.</li>
+        <li><strong>Small slices.</strong> Work is split into pieces that each end with something you can click. The agent builds one, then stops.</li>
+        <li><strong>Prove, don't claim.</strong> Every slice ends with tests, a type check and a browser check that the agent actually ran.</li>
+        <li><strong>Review like a colleague.</strong> You read what changed, ask for evidence, and sometimes ask a second agent to look.</li>
+      </ul>
+      <p><strong>How each station is laid out.</strong> From the foundation onwards, each course part is a <em>station</em> with the same seven blocks: <strong>1 Goal · 2 Decisions · 3 Prompt to try · 4 What you should see · 5 View code · 6 Checkpoint · 7 Watch.</strong> The prompts are written by us and work in Codex, Claude Code or Antigravity. The code is the course author's finished version, linked to the exact lines on GitHub, so you can compare your agent's result with a known-good one.</p>
+
+      <div class="box key"><span class="tag">Key lesson</span><p>Your agent's code won't match the reference line for line, and it doesn't need to. What must match are the <strong>decisions</strong> (the rules in the Decisions table) and the <strong>evidence</strong> (the checks in What you should see).</p></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 4. WHAT YOU NEED ============ -->
+    <section class="sec" id="need">
+      <p class="eyebrow">Setup</p>
+      <h2>What you need</h2>
+
+      <div class="tw"><table class="tbl">
+        <thead><tr><th scope="col">Tool</th><th scope="col">Version</th><th scope="col">What it's for</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Tool">Git</td><td data-label="Version">any recent (2.40+)</td><td data-label="What it's for">Clone the repo, commit each slice</td><td data-label="Notes">Comes with Xcode tools on macOS; <code>sudo apt install git</code> in WSL</td></tr>
+          <tr><td data-label="Tool">Node.js + npm</td><td data-label="Version"><strong>Node 22.12 or newer</strong> (Node 24 is fine)</td><td data-label="What it's for">Runs the API, the web app, the workers, the tests</td><td data-label="Notes">The web app uses Vite 7, which needs Node 20.19+ or 22.12+. Install with nvm so you can switch versions</td></tr>
+          <tr><td data-label="Tool">Docker Desktop</td><td data-label="Version">current</td><td data-label="What it's for">Runs PostgreSQL, Redis, RabbitMQ and Jaeger</td><td data-label="Notes">On Windows, turn on the WSL 2 engine and WSL integration for your Ubuntu distro</td></tr>
+          <tr><td data-label="Tool">VS Code</td><td data-label="Version">current</td><td data-label="What it's for">Read diffs, open files the agent changed</td><td data-label="Notes">On Windows add the <strong>WSL</strong> extension</td></tr>
+          <tr><td data-label="Tool">Microsoft Edge</td><td data-label="Version">current</td><td data-label="What it's for">The headed Playwright tests in this repo ask for Edge by name</td><td data-label="Notes"><code>npx playwright install msedge</code> installs it if you don't have it</td></tr>
+          <tr><td data-label="Tool">An AI coding agent</td><td data-label="Version">current</td><td data-label="What it's for">Writes the code</td><td data-label="Notes">Codex (used in the course), Claude Code or Antigravity. See <a href="#agent">Choose your agent</a></td></tr>
+        </tbody>
+      </table></div>
+
+      <h3 id="install">Install, macOS or Windows</h3>
+      <div class="tabs-os">
+        <div class="os-tabs" role="tablist" aria-label="Operating system">
+          <button type="button" role="tab" data-key="mac" id="tab-os-mac" aria-controls="os-mac" aria-selected="true">macOS</button>
+          <button type="button" role="tab" data-key="win" id="tab-os-win" aria-controls="os-win" aria-selected="false">Windows (WSL2)</button>
+        </div>
+        <div class="os-panel" role="tabpanel" id="os-mac" aria-labelledby="tab-os-mac"><h4 class="nojs">macOS</h4>
+          <ol>
+            <li>Install Homebrew if you don't have it (see brew.sh), then Git and nvm:
+              <div class="codebox">
+                <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+                <pre><code>$ xcode-select --install          # gives you git
+$ brew install nvm</code></pre>
+              </div>
+              Follow the lines <code>brew</code> prints to add nvm to your shell, then open a new terminal.
+            </li>
+            <li>Install Node 22 and make it the default:
+              <div class="codebox">
+                <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+                <pre><code>$ nvm install 22
+$ nvm alias default 22</code></pre>
+              </div>
+            </li>
+            <li>Install <strong>Docker Desktop for Mac</strong> from docker.com and start it once. Wait until the whale icon says it's running.</li>
+            <li>Install <strong>VS Code</strong>, and in VS Code run <em>Shell Command: Install 'code' command in PATH</em> from the command palette.</li>
+            <li>Install <strong>Microsoft Edge</strong>, or let Playwright install it later.</li>
+            <li>Make a folder for the course: <code>mkdir -p ~/code &amp;&amp; cd ~/code</code>.</li>
+          </ol>
+        </div>
+        <div class="os-panel" role="tabpanel" id="os-win" aria-labelledby="tab-os-win"><h4 class="nojs">Windows (WSL2)</h4>
+          <p>The course is recorded on a Mac, and the repo's commands assume a Unix shell: every <code>npm</code> script sets variables the Unix way (<code>API_PORT=3101 npm run …</code>) and calls a <code>sh</code> script to create databases. They <strong>won't run in PowerShell or Command Prompt.</strong> The fix is WSL2: a real Ubuntu inside Windows. Do everything in the Ubuntu terminal.</p>
+          <ol>
+            <li>Set up WSL2 with Ubuntu. Our <a href="https://balajiraghuram92.github.io/help/#wsl">Help page</a> walks through it step by step. In short, in an admin PowerShell: <code>wsl --install -d Ubuntu-24.04</code>, restart, then open <strong>Ubuntu</strong> from the Start menu and create your Linux user.</li>
+            <li>Install <strong>Docker Desktop for Windows</strong>. In <em>Settings → General</em> tick <strong>Use the WSL 2 based engine</strong>. In <em>Settings → Resources → WSL integration</em> switch on your Ubuntu distro. Apply and restart Docker Desktop.</li>
+            <li>In the Ubuntu terminal, install Git, build tools and nvm, then Node 22:
+              <div class="codebox">
+                <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+                <pre><code>$ sudo apt update &amp;&amp; sudo apt install -y git build-essential curl
+$ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+$ exec $SHELL
+$ nvm install 22
+$ nvm alias default 22</code></pre>
+              </div>
+            </li>
+            <li>Work inside the Linux file system, not under <code>/mnt/c</code>. It's many times faster, and file watching (which Vite and <code>tsx watch</code> rely on) works properly there:
+              <div class="codebox">
+                <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+                <pre><code>$ mkdir -p ~/code &amp;&amp; cd ~/code</code></pre>
+              </div>
+            </li>
+            <li>Install <strong>VS Code</strong> on Windows with the <strong>WSL</strong> extension. From any folder in the Ubuntu terminal, <code>code .</code> opens that folder in VS Code, connected to WSL. Files you see are the Linux files.</li>
+            <li>For the headed browser tests, Windows 11 shows Linux windows on your desktop (this is WSLg). Install Edge for Playwright inside Ubuntu when you first need it: <code>npx playwright install --with-deps msedge</code> (it asks for your Linux password).</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="box win"><span class="tag">Windows</span><p>Run your AI agent <strong>inside WSL</strong> too (install its command-line tool in Ubuntu, or open the folder with <code>code .</code> and use the agent's VS Code extension, which then runs in WSL). If the agent runs on the Windows side, it will try PowerShell versions of the commands and the npm scripts will fail.</p></div>
+
+      <h3 id="check">Check your tools</h3>
+      <p>Run these five commands (macOS terminal or Ubuntu terminal). Each should print a version, not an error.</p>
+
+      <div class="term" role="img" aria-label="Terminal output: the five check commands, each printing a version: git 2.43.0, node v22.12.0, npm 10.9.0, Docker 28.3.2 and Docker Compose v2.38.2.">
+        <div class="term-bar"><i></i><i></i><i></i><span>Terminal · check your tools</span></div>
+        <pre><span class="ps">$</span> git --version
+git version 2.43.0
+<span class="ps">$</span> node --version
+v22.12.0
+<span class="ps">$</span> npm --version
+10.9.0
+<span class="ps">$</span> docker --version
+Docker version 28.3.2, build 578ccf6
+<span class="ps">$</span> docker compose version
+Docker Compose version v2.38.2
+<span class="ps">$</span> docker info --format '{{.ServerVersion}}'
+28.3.2</pre>
+      </div>
+
+      <p>Your numbers will differ; what matters is that each command answers. Node must say <strong>v22.12</strong> or higher.</p>
+
+      <p><strong>If a check fails</strong></p>
+      <div class="tw"><table class="tbl">
+        <thead><tr><th scope="col">Symptom</th><th scope="col">Fix</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Symptom"><code>node: command not found</code></td><td data-label="Fix">Open a new terminal so nvm loads, then <code>nvm use 22</code></td></tr>
+          <tr><td data-label="Symptom"><code>node --version</code> says v18 or v20.x below 20.19</td><td data-label="Fix"><code>nvm install 22 &amp;&amp; nvm alias default 22</code></td></tr>
+          <tr><td data-label="Symptom"><code>Cannot connect to the Docker daemon</code></td><td data-label="Fix">Start Docker Desktop and wait until it says running</td></tr>
+          <tr><td data-label="Symptom">On Windows, <code>docker: command not found</code> inside Ubuntu</td><td data-label="Fix">Docker Desktop → Settings → Resources → WSL integration → switch on your distro</td></tr>
+          <tr><td data-label="Symptom"><code>docker info</code> works but <code>docker compose</code> doesn't</td><td data-label="Fix">Update Docker Desktop; Compose v2 ships with it</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="checkpoint" data-ck="p1:setup">
+        <p class="blk">Checkpoint <span class="ck-count" aria-live="polite">0 / 5</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="tools"> <span>All five version commands print a version</span></label></li>
+          <li><label><input type="checkbox" data-id="node22"> <span>Node is v22.12 or newer</span></label></li>
+          <li><label><input type="checkbox" data-id="docker"> <span><code>docker info</code> answers without an error</span></label></li>
+          <li><label><input type="checkbox" data-id="wsl"> <span>(Windows only) I'm working in <code>~/code</code> inside Ubuntu, not under <code>/mnt/c</code></span></label></li>
+          <li><label><input type="checkbox" data-id="code"> <span><code>code .</code> opens VS Code on this folder</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 5. CHOOSE YOUR AGENT ============ -->
+    <section class="sec" id="agent">
+      <p class="eyebrow">Your co-worker</p>
+      <h2>Choose your agent</h2>
+      <p>The course uses <strong>Codex</strong>, OpenAI's coding agent. Everything here also works with <strong>Claude Code</strong> (Anthropic) and <strong>Antigravity</strong> (Google's agent-first editor). Pick the one you already pay for. The ideas are the same; only the names of a few features differ.</p>
+      <p>What all three have in common:</p>
+      <ul>
+        <li>They read an <strong>instructions file</strong> at the start of every chat: project rules, commands, things to avoid.</li>
+        <li>They can <strong>plan first</strong>: discuss and write a plan without touching files, until you approve.</li>
+        <li>They run <strong>terminal commands</strong> (with your permission) and edit files.</li>
+        <li>They can load <strong>skills</strong>: reusable instruction packs, such as the grilling skill this course uses.</li>
+      </ul>
+
+      <div class="agents" role="region" aria-label="How the steps map to each agent">
+        <div class="ag-tabs" role="tablist" aria-label="Your coding agent">
+          <button type="button" role="tab" data-key="codex" id="tab-codex" aria-controls="ag-codex" aria-selected="true">Codex</button>
+          <button type="button" role="tab" data-key="claude" id="tab-claude" aria-controls="ag-claude" aria-selected="false">Claude Code</button>
+          <button type="button" role="tab" data-key="ag" id="tab-ag" aria-controls="ag-ag" aria-selected="false">Antigravity</button>
+        </div>
+        <div class="ag-panel" role="tabpanel" id="ag-codex" aria-labelledby="tab-codex"><h4 class="nojs">Codex</h4>
+          <div class="tw"><table class="tbl">
+            <thead><tr><th scope="col">Need</th><th scope="col">How in Codex</th></tr></thead>
+            <tbody>
+              <tr><td data-label="Need">Instructions file</td><td data-label="How in Codex"><code>AGENTS.md</code> in the repo root and in each part folder. Codex reads the nearest ones.</td></tr>
+              <tr><td data-label="Need">Plan first</td><td data-label="How in Codex">Use plan mode, as the course does in <em>Plan Mode &amp; Grilling</em>, or say "don't edit any files yet".</td></tr>
+              <tr><td data-label="Need">Skills</td><td data-label="How in Codex">Installed skills appear when you type <code>/</code> in the chat. The course installs the grilling skills (see <a href="#skills">Install the grilling skills</a>).</td></tr>
+              <tr><td data-label="Need">Effort</td><td data-label="How in Codex">The reasoning level (thinking level) in the model settings: low, medium, high, extra high.</td></tr>
+              <tr><td data-label="Need">Browser checks</td><td data-label="How in Codex">Ask it to drive a visible Edge or Chrome window with Playwright.</td></tr>
+              <tr><td data-label="Need">Long tasks</td><td data-label="How in Codex">Goals: a long-running task with success criteria (Page 3, Part 6–7 interlude).</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="ag-panel" role="tabpanel" id="ag-claude" aria-labelledby="tab-claude"><h4 class="nojs">Claude Code</h4>
+          <div class="tw"><table class="tbl">
+            <thead><tr><th scope="col">Need</th><th scope="col">How in Claude Code</th></tr></thead>
+            <tbody>
+              <tr><td data-label="Need">Instructions file</td><td data-label="How in Claude Code"><code>CLAUDE.md</code>. Create one in the repo root containing the single line <code>@AGENTS.md</code> so it imports the repo's existing rules, and the same in each part folder you work in.</td></tr>
+              <tr><td data-label="Need">Plan first</td><td data-label="How in Claude Code">Plan mode (press Shift+Tab until the status line shows plan mode), or say "don't edit any files yet".</td></tr>
+              <tr><td data-label="Need">Skills</td><td data-label="How in Claude Code">Skills live in <code>.claude/skills/&lt;name&gt;/SKILL.md</code> (project) or <code>~/.claude/skills/</code> (personal). They load when relevant or when you name them.</td></tr>
+              <tr><td data-label="Need">Effort</td><td data-label="How in Claude Code">Choose the model with <code>/model</code>; ask for deeper thinking with your version's effort setting, or by writing "think hard" in the prompt.</td></tr>
+              <tr><td data-label="Need">Browser checks</td><td data-label="How in Claude Code">Ask it to write and run a Playwright script in headed Edge or Chrome.</td></tr>
+              <tr><td data-label="Need">Long tasks</td><td data-label="How in Claude Code">Give a broad task plus success criteria in one prompt and let it run; use <code>/clear</code> between unrelated tasks.</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="ag-panel" role="tabpanel" id="ag-ag" aria-labelledby="tab-ag"><h4 class="nojs">Antigravity</h4>
+          <div class="tw"><table class="tbl">
+            <thead><tr><th scope="col">Need</th><th scope="col">How in Antigravity</th></tr></thead>
+            <tbody>
+              <tr><td data-label="Need">Instructions file</td><td data-label="How in Antigravity">Workspace <strong>rules</strong> (Customizations → Rules). Add a rule that says "Follow the instructions in AGENTS.md at the repo root and in the part folder you work in."</td></tr>
+              <tr><td data-label="Need">Plan first</td><td data-label="How in Antigravity">Start the conversation in <strong>Planning</strong> mode (not Fast). The agent writes a plan you can comment on before it builds.</td></tr>
+              <tr><td data-label="Need">Skills</td><td data-label="How in Antigravity">If your version supports skills, install the grilling skill there; otherwise paste the grilling instructions from <a href="#skills">Install the grilling skills</a> into a workspace rule.</td></tr>
+              <tr><td data-label="Need">Effort</td><td data-label="How in Antigravity">Pick the model in the agent panel; prefer the strongest reasoning model for Parts 3, 5 and 6.</td></tr>
+              <tr><td data-label="Need">Browser checks</td><td data-label="How in Antigravity">Antigravity has its own browser agent, but this repo's tests expect Playwright with Edge. Ask for Playwright explicitly.</td></tr>
+              <tr><td data-label="Need">Long tasks</td><td data-label="How in Antigravity">Agent Manager runs several agents; give each its own worktree (see Page 3).</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <div class="box note"><span class="tag">Note</span><p>Features move fast in all three tools. If a menu name here doesn't match your version, the plain-English fallback always works: "Don't edit files yet; first ask me questions until the plan is clear."</p></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 6. COST AND SAFETY ============ -->
+    <section class="sec" id="cost">
+      <h2>Cost and safety</h2>
+      <div class="box cost"><span class="tag">Cost and safety</span><ul>
+        <li><strong>Know how you're billed.</strong> A ChatGPT, Claude or Google subscription and an API key are billed separately. A coding agent on an API key can spend real money in an afternoon, because each step re-reads a lot of code.</li>
+        <li><strong>Set usage alerts</strong> in the provider's billing page. Alerts warn you; they are <strong>not</strong> a hard stop. Check whether your provider also offers a spending limit and set it.</li>
+        <li><strong>Never paste real keys or passwords</strong> into a prompt or into the repo. This project needs none: the payment service is a local mock and the databases use throwaway local passwords from <code>docker-compose.yml</code>.</li>
+        <li><strong>Read before you approve commands.</strong> Approve <code>npm test</code>; think twice before approving anything that deletes outside the project folder or pushes to a remote.</li>
+        <li><strong>Read-only for data.</strong> In Part 8 you'll let an agent look at traces. Give it read-only access; it never needs to change them.</li>
+      </ul></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 7. REFERENCE AND WORKSHOP FOLDERS ============ -->
+    <section class="sec" id="folders">
+      <p class="eyebrow">Two copies of the repo</p>
+      <h2>Reference and workshop folders</h2>
+      <p>The course repo already contains the finished app, part by part. That's useful, and dangerous: if your agent can see the finished code, it will copy it, and you'll learn nothing about steering. So you make <strong>two copies</strong>:</p>
+
+      <figure class="diagram">
+        <div class="codebox" role="img" aria-label="Folder tree: ~/code holds reference, the finished app to read and compare, and workshop, your copy with a fresh git history, where Parts 2 to 8 start empty and stripe-service stays as the mock payment provider.">
+          <div class="codebar"><span class="fname">Folder tree</span></div>
+          <pre>~/code/
+├── reference/                    ← the finished app. Read it, run it, compare. Never build here.
+│   ├── docker-compose.yml
+│   ├── part-1-foundation/  … part-8-cross-stack-debugging/   (all complete)
+│   └── stripe-service/
+└── workshop/                     ← your copy. Fresh git history. Your agent works here.
+    ├── AGENTS.md                 (the course's root rules)
+    ├── docker-compose.yml
+    ├── scripts/workshop-db       (creates one database per part)
+    ├── part-1-foundation/        (complete: your starting point)
+    ├── part-2-create-auction-and-bid/   (empty)
+    ├── …                         (empty)
+    ├── part-8-cross-stack-debugging/    (empty)
+    └── stripe-service/           (the mock payment provider, used in Part 7)</pre>
+        </div>
+        <figcaption>Each part starts as a copy of the one before. Your agent fills the empty folders, one part at a time.</figcaption>
+      </figure>
+
+      <div class="box warn"><span class="tag">Careful: this deletes folders</span><p>The cleanup below deletes the contents of Parts 2–8 <strong>in <code>workshop/</code> only</strong>. Run it from inside <code>~/code/workshop</code> and check <code>pwd</code> first. If you run it in <code>reference/</code> you'll have to clone again (no harm done, but annoying).</p></div>
+
+      <p><strong>Commands</strong> (same on macOS and WSL):</p>
+      <div class="codebox">
+        <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+        <pre><code>cd ~/code
+git clone https://github.com/schneidenbach/master-dot-dev-codex-course-live.git reference
+git clone https://github.com/schneidenbach/master-dot-dev-codex-course-live.git workshop
+cd workshop
+pwd                                   # must end in /workshop
+rm -rf .git                           # drop the author's history: no peeking at later parts
+for d in part-[2-8]-*/; do
+  rm -rf "$d" &amp;&amp; mkdir "$d" &amp;&amp; touch "$d/.gitkeep"
+done
+git init -b main
+git add -A
+git commit -m "Workshop start: Part 1 only"</code></pre>
+      </div>
+      <ul>
+        <li><code>rm -rf .git</code> removes the author's git history. Without it, an agent asked to "find the bug" in Part 5 could simply read the commit that planted it.</li>
+        <li>The loop empties each of <code>part-2-…</code> to <code>part-8-…</code> and leaves an empty <code>.gitkeep</code> file, because git doesn't track empty folders.</li>
+        <li><code>stripe-service/</code> stays: Part 7 uses it as a ready-made "payment provider". (It's the author's final version, with fixes from Part 7 and tracing from Part 8 already in. That's fine: in real work, a provider is something you're given.)</li>
+        <li>The first commit gives you a clean starting point to compare against.</li>
+      </ul>
+
+      <div class="see">
+        <p class="blk">What you should see</p>
+        <ul class="see-list">
+          <li>each of Parts 2–8 holds 0 files apart from <code>.gitkeep</code>;</li>
+          <li><code>git status</code> says the tree is clean.</li>
+        </ul>
+        <div class="term" role="img" aria-label="Terminal output: each of Parts 2 to 8 reports 0 files, then git status says the working tree is clean.">
+          <div class="term-bar"><i></i><i></i><i></i><span>Terminal · workshop</span></div>
+          <pre><span class="ps">$</span> for d in part-[2-8]-*/; do echo "$d $(find "$d" -type f ! -name .gitkeep | wc -l)"; done
+part-2-create-auction-and-bid/ 0
+part-3-business-rules-concurrency/ 0
+part-4-realtime-socketio-redis/ 0
+part-5-hidden-defect-review/ 0
+part-6-async-close-rabbitmq/ 0
+part-7-winner-checkout/ 0
+part-8-cross-stack-debugging/ 0
+<span class="ps">$</span> git status
+On branch main
+nothing to commit, working tree clean</pre>
+        </div>
+      </div>
+
+      <div class="box repo"><span class="tag">Repo note</span><p>The repo's README lists the parts with <strong>Parts 4 and 5 swapped</strong> (it calls Part 4 the hidden defect and Part 5 the real-time part). The folders are right: <code>part-4-realtime-socketio-redis</code>, then <code>part-5-hidden-defect-review</code>. We follow the folders everywhere.</p></div>
+
+      <p><strong>Optional: put the workshop on GitHub.</strong> Page 3 uses GitHub issues and pull requests. If you want to follow that step, create an empty <strong>private</strong> repo on GitHub and push <code>workshop</code> to it now (<code>git remote add origin &lt;YOUR-REPO-URL&gt;</code> then <code>git push -u origin main</code>). Keep it private: the course code has no licence file, so don't republish it.</p>
+
+      <div class="checkpoint" data-ck="p1:folders">
+        <p class="blk">Checkpoint <span class="ck-count" aria-live="polite">0 / 4</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="two"> <span>I have <code>~/code/reference</code> and <code>~/code/workshop</code></span></label></li>
+          <li><label><input type="checkbox" data-id="empty"> <span>Parts 2–8 in <code>workshop</code> report 0 files</span></label></li>
+          <li><label><input type="checkbox" data-id="fresh"> <span><code>workshop</code> has its own git history with one commit</span></label></li>
+          <li><label><input type="checkbox" data-id="swap"> <span>I know the README swaps Parts 4 and 5, and I follow the folder names</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 8. PORTS ============ -->
+    <section class="sec" id="ports">
+      <p class="eyebrow">Reference</p>
+      <h2>Run any part: ports</h2>
+      <p>Every part runs on its own ports with its own database, so you can run <code>reference/part-3…</code> next to <code>workshop/part-3…</code> and compare. The numbers below come from each part's <code>package.json</code> and the root <code>docker-compose.yml</code>.</p>
+
+      <div class="tw"><table class="tbl">
+        <thead><tr><th scope="col">Part</th><th scope="col">Web</th><th scope="col">API</th><th scope="col">Database</th><th scope="col">Also starts</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Part">1 Foundation</td><td data-label="Web">http://localhost:5101</td><td data-label="API">3101</td><td data-label="Database"><code>auction_part_1</code></td><td data-label="Also starts">—</td></tr>
+          <tr><td data-label="Part">2 Auctions &amp; bids</td><td data-label="Web">http://localhost:5102</td><td data-label="API">3102</td><td data-label="Database"><code>auction_part_2</code></td><td data-label="Also starts">—</td></tr>
+          <tr><td data-label="Part">3 Rules &amp; race</td><td data-label="Web">http://localhost:5103</td><td data-label="API">3103</td><td data-label="Database"><code>auction_part_3</code></td><td data-label="Also starts">—</td></tr>
+          <tr><td data-label="Part">4 Live updates</td><td data-label="Web">http://localhost:5104</td><td data-label="API">3104</td><td data-label="Database"><code>auction_part_4</code></td><td data-label="Also starts">Redis</td></tr>
+          <tr><td data-label="Part">5 Hidden defect</td><td data-label="Web">http://localhost:5105</td><td data-label="API">3105</td><td data-label="Database"><code>auction_part_5</code></td><td data-label="Also starts">Redis</td></tr>
+          <tr><td data-label="Part">6 Closing</td><td data-label="Web">http://localhost:5106</td><td data-label="API">3106</td><td data-label="Database"><code>auction_part_6</code></td><td data-label="Also starts">Redis, RabbitMQ, close worker, notification worker</td></tr>
+          <tr><td data-label="Part">7 Checkout</td><td data-label="Web">http://localhost:5107</td><td data-label="API">3107</td><td data-label="Database"><code>auction_part_7</code></td><td data-label="Also starts">Redis, RabbitMQ, both workers, Mock Stripe on 7107</td></tr>
+          <tr><td data-label="Part">8 Tracing</td><td data-label="Web">http://localhost:5108</td><td data-label="API">3108</td><td data-label="Database"><code>auction_part_8</code></td><td data-label="Also starts">Redis, RabbitMQ, both workers, Mock Stripe on 7108, Jaeger</td></tr>
+        </tbody>
+      </table></div>
+
+      <p><strong>Shared containers</strong> (one copy each, used by every part):</p>
+      <div class="tw"><table class="tbl">
+        <thead><tr><th scope="col">Service</th><th scope="col">Port on your machine</th><th scope="col">Open in a browser?</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Service">PostgreSQL</td><td data-label="Port on your machine">55432</td><td data-label="Open in a browser?">No (use <code>docker compose exec postgres psql -U auction</code>)</td></tr>
+          <tr><td data-label="Service">Redis</td><td data-label="Port on your machine">56379</td><td data-label="Open in a browser?">No</td></tr>
+          <tr><td data-label="Service">RabbitMQ</td><td data-label="Port on your machine">56726 (AMQP)</td><td data-label="Open in a browser?">Management UI: http://localhost:15676</td></tr>
+          <tr><td data-label="Service">Jaeger</td><td data-label="Port on your machine">4318 (OTLP, where services send traces)</td><td data-label="Open in a browser?">Jaeger UI: http://localhost:16686</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="box repo"><span class="tag">Repo note: the README's port tables are wrong</span><p>The top-level README says Parts 5–8 get their own Redis, RabbitMQ and Jaeger on ports like 6305, 15606 and 16606. They don't. <code>docker-compose.yml</code> defines <strong>one</strong> of each, shared, on the ports above, and every part's <code>package.json</code> points at those. Trust the table on this page.</p></div>
+
+      <div class="box warn"><span class="tag">Careful: one RabbitMQ part at a time</span><p>Because RabbitMQ is shared, Parts 6, 7 and 8 all read the same <code>auction.notifications</code> queue. If two of them run at once, one part's worker can take the other part's messages, fail to find the matching row in its own database, and retry forever. Run <strong>one</strong> of Parts 6–8 at a time (stop it with Ctrl+C before starting another). Parts 1–5 can run side by side.</p></div>
+
+      <p><strong>Stopping and resetting.</strong> Ctrl+C stops a part's processes; the containers keep running. <code>npm run db:reset</code> (inside a part) wipes and re-seeds only that part's database. <code>docker compose down</code> from the repo root stops the shared containers; add <code>-v</code> only if you want to delete every part's data.</p>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 9. AGENT BASICS ============ -->
+    <section class="sec" id="basics">
+      <p class="eyebrow">Settings that matter</p>
+      <h2>Agent basics: effort and usage</h2>
+      <p><strong>Effort</strong> (also called <em>reasoning</em> or <em>thinking level</em>) is how long the model thinks before it acts. More effort is slower and costs more, but catches more. Match it to the task:</p>
+
+      <div class="tw"><table class="tbl">
+        <thead><tr><th scope="col">Task</th><th scope="col">Effort</th><th scope="col">Example from this course</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Task">A small, obvious edit</td><td data-label="Effort">Low</td><td data-label="Example from this course">Rename a label, fix a typo in a README</td></tr>
+          <tr><td data-label="Task">Everyday feature work</td><td data-label="Effort">Medium</td><td data-label="Example from this course">Part 2: post an auction form and its API route</td></tr>
+          <tr><td data-label="Task">Hard reasoning about time, order or failure</td><td data-label="Effort">High or extra high</td><td data-label="Example from this course">Part 3's race, Part 5's hidden defect, Part 6's crash-safe close</td></tr>
+          <tr><td data-label="Task">Reviewing someone else's change</td><td data-label="Effort">High</td><td data-label="Example from this course">Page 2's code review step</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="box note"><span class="tag">What the instructor does</span><p>The course is recorded on Medium effort to keep the videos moving. The instructor says that in his own work he prefers high or extra-high, and avoids "fast" modes that trade thinking for speed. Our suggestion: Medium for Parts 1–2, High from Part 3 onwards.</p></div>
+
+      <p><strong>Usage.</strong> Agents show how much of your plan or budget you've used (Codex shows it in its status; Claude Code has a usage view; Antigravity shows model quota). Check it at the end of each part. If a single slice burns a surprising amount, the prompt was probably too vague and the agent wandered: tighten the prompt rather than raising the budget.</p>
+
+      <div class="watch">
+        <p class="blk">Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/introduction/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Introduction</span><span class="w-time">00:00:00 · 8 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/codex-overview/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Codex Overview</span><span class="w-time">00:08:10 · 10 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/thinking-levels/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Thinking Levels</span><span class="w-time">00:17:59 · 5 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 10. A THROWAWAY FIRST BUILD ============ -->
+    <section class="sec" id="practice">
+      <p class="eyebrow">Warm-up</p>
+      <h2>A throwaway first build</h2>
+      <p>Before the real app, build something you'll throw away. The point is to feel how the agent works: how long it runs, what it asks, what it gets wrong. Use a scratch folder, <strong>not</strong> <code>workshop</code>:</p>
+      <div class="codebox">
+        <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+        <pre><code>mkdir -p ~/code/practice &amp;&amp; cd ~/code/practice &amp;&amp; git init</code></pre>
+      </div>
+
+      <p>The course also uses this step to <strong>name the tech stack</strong>. If you don't, the agent picks for you, and it may pick a framework you didn't want. Saying "React with Vite and TypeScript" up front costs one line.</p>
+
+      <div class="prompt-box" id="p1-prompt-practice">
+        <div class="pb-head">
+          <span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p1-prompt-practice &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">Start your agent in <code>~/code/practice</code> (an empty folder). Effort: <b>Medium</b>.</p>
+        <pre class="pb-text">Build a small auction website in this empty folder. It should look and feel like a
+typical online auction site, for used computer hardware.
+
+Tech stack (use exactly this, nothing extra):
+- React + TypeScript, served by Vite
+- No backend yet: keep the sample data in a TypeScript file
+- No CSS framework, no component library, no router library
+
+Pages (two routes only):
+1. Home "/": a grid of 6 sample auctions. Each card shows a title, a current price
+   in US dollars, the number of bids and the time left.
+2. Auction "/items/<span class="ph">&lt;slug&gt;</span>": one auction with a larger picture area, the current
+   price, time left, the seller's name and a bid box (the bid box does nothing yet).
+
+Themes: offer three distinct visual themes (for example "classic", "dark",
+"bold"). Put a theme switcher on the home page; the chosen theme applies to both
+pages and survives a reload.
+
+Before you write code, tell me in 5 lines or fewer how you will structure the files.
+Then build it. When you're done:
+- run the TypeScript type check and fix every error,
+- start the dev server and tell me the exact URL,
+- list what you did NOT build that a real auction site would need.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><ul>
+          <li>It names the stack and forbids extras, so you don't get a surprise UI library or a router you didn't ask for.</li>
+          <li>It defines "done" as checks the agent must run (type check, server up), not "looks finished".</li>
+          <li>Asking for the file plan first gives you one cheap moment to say "no" before it writes 20 files.</li>
+          <li>The last line ("what you did NOT build") makes the agent state its own gaps instead of hiding them.</li>
+        </ul></details>
+        <details class="pb-steer"><summary>If the agent goes off track, steer with</summary><pre class="pb-text">Stop. You added <span class="ph">&lt;THING I DIDN'T ASK FOR&gt;</span>. Remove it and keep to the stack I listed.
+Then show me the file list again and re-run the type check.</pre><button type="button" class="copy" data-copy="this-pre">Copy</button></details>
+      </div>
+
+      <div class="see">
+        <p class="blk">What you should see</p>
+        <ul class="see-list">
+          <li>a home page with six cards and a theme switcher with three choices;</li>
+          <li>clicking a card opens <code>/items/&lt;slug&gt;</code>;</li>
+          <li>the theme sticks after a reload;</li>
+          <li>a short "not built" list (accounts, real bidding, payments…).</li>
+        </ul>
+      </div>
+
+      <figure class="wire">
+        <svg viewbox="0 0 680 360" role="img" aria-label="Sketch of the practice home page: a header, three theme swatches, and a grid of six auction cards with prices">
+          <rect class="bx" x="10" y="10" width="660" height="50" rx="8"></rect>
+          <text x="28" y="40" font-weight="700">Auction House</text>
+          <circle cx="430" cy="24" r="10" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="3"></circle>
+          <text class="mut" x="430" y="50" text-anchor="middle" font-size="11">Classic</text>
+          <circle cx="510" cy="24" r="10" fill="var(--ink)" stroke="var(--line)" stroke-width="1.5"></circle>
+          <text class="mut" x="510" y="50" text-anchor="middle" font-size="11">Dark</text>
+          <circle cx="590" cy="24" r="10" fill="var(--violet)" stroke="var(--line)" stroke-width="1.5"></circle>
+          <text class="mut" x="590" y="50" text-anchor="middle" font-size="11">Bold</text>
+          <rect class="bx" x="10" y="76" width="200" height="120" rx="8"></rect>
+          <rect x="20" y="86" width="180" height="56" rx="6" fill="var(--surface-2)"></rect>
+          <rect x="22" y="152" width="120" height="8" rx="4" fill="var(--line)"></rect>
+          <text class="price" x="22" y="180">$101</text>
+          <text class="mut" x="92" y="180">3 bids · 2h left</text>
+          <rect class="bx" x="240" y="76" width="200" height="120" rx="8"></rect>
+          <rect x="250" y="86" width="180" height="56" rx="6" fill="var(--surface-2)"></rect>
+          <rect x="252" y="152" width="120" height="8" rx="4" fill="var(--line)"></rect>
+          <text class="price" x="252" y="180">$480</text>
+          <text class="mut" x="322" y="180">3 bids · 2h left</text>
+          <rect class="bx" x="470" y="76" width="200" height="120" rx="8"></rect>
+          <rect x="480" y="86" width="180" height="56" rx="6" fill="var(--surface-2)"></rect>
+          <rect x="482" y="152" width="120" height="8" rx="4" fill="var(--line)"></rect>
+          <text class="price" x="482" y="180">$1,250</text>
+          <text class="mut" x="552" y="180">3 bids · 2h left</text>
+          <rect class="bx" x="10" y="212" width="200" height="120" rx="8"></rect>
+          <rect x="20" y="222" width="180" height="56" rx="6" fill="var(--surface-2)"></rect>
+          <rect x="22" y="288" width="120" height="8" rx="4" fill="var(--line)"></rect>
+          <text class="price" x="22" y="316">$75</text>
+          <text class="mut" x="92" y="316">3 bids · 2h left</text>
+          <rect class="bx" x="240" y="212" width="200" height="120" rx="8"></rect>
+          <rect x="250" y="222" width="180" height="56" rx="6" fill="var(--surface-2)"></rect>
+          <rect x="252" y="288" width="120" height="8" rx="4" fill="var(--line)"></rect>
+          <text class="price" x="252" y="316">$320</text>
+          <text class="mut" x="322" y="316">3 bids · 2h left</text>
+          <rect class="bx" x="470" y="212" width="200" height="120" rx="8"></rect>
+          <rect x="480" y="222" width="180" height="56" rx="6" fill="var(--surface-2)"></rect>
+          <rect x="482" y="288" width="120" height="8" rx="4" fill="var(--line)"></rect>
+          <text class="price" x="482" y="316">$2,050</text>
+          <text class="mut" x="552" y="316">3 bids · 2h left</text>
+        </svg>
+        <figcaption>Yours will look different. That's fine: check the behaviour, not the pixels.</figcaption>
+      </figure>
+
+      <div class="box note"><span class="tag">How it compares with the repo</span><p>The repo's <code>part-1-foundation/web</code> is what the author kept from this warm-up: a single-theme catalogue of six data-centre parts (an H100 GPU, an EPYC CPU, memory, a chassis, a switch, a cooling loop) with search and an item page. The theme switcher was practice and didn't survive. Throwing work away is normal; the agent made it cheap.</p></div>
+
+      <h3 id="skills">Install the grilling skills</h3>
+      <p>While the build runs, install the course author's skills in a <strong>second terminal</strong>. A <em>skill</em> is a folder of instructions the agent can load on demand: here, how to interview you ("grill" you) before building, and how to write the answers into docs.</p>
+      <div class="codebox">
+        <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+        <pre><code>cd ~/code/workshop
+npx skills@latest add schneidenbach/skills</code></pre>
+      </div>
+      <p>When it asks, pick these four: <strong>domain-modeling</strong>, <strong>grill-me</strong>, <strong>grill-with-docs</strong>, <strong>grilling</strong>, and choose your agent (Codex, Claude Code or Antigravity) as the target.</p>
+      <p>What each one is for (one line each):</p>
+      <ul>
+        <li><strong>grill-me</strong>: the agent asks you questions until the requirement is clear, then summarises.</li>
+        <li><strong>grill-with-docs</strong>: the same, but it also writes the decisions into files (<code>GRILL.md</code>, and a glossary <code>CONTEXT.md</code> and decision records in later parts). This is the one the course uses every time.</li>
+        <li><strong>grilling</strong>: shared rules the two grill skills follow (how many questions, how to recommend an answer).</li>
+        <li><strong>domain-modeling</strong>: helps the agent name things consistently (an "accepted bid" vs a "bid attempt"), which shows up in <code>CONTEXT.md</code> from Part 4.</li>
+      </ul>
+      <p><strong>Check:</strong> in your agent, type <code>/grill</code> (Codex and Claude Code list matching skills as you type). You should see the grill skills offered. In Antigravity, open Customizations and check the skills are listed.</p>
+
+      <div class="box note"><span class="tag">If the installer doesn't support your agent</span><p>Open the installed skill folder, copy the text of <code>grill-with-docs</code> and its <code>grilling</code> rules, and save it as an instructions rule (Antigravity) or as <code>.claude/skills/grill-with-docs/SKILL.md</code> (Claude Code). The behaviour you need is simple: "Before building, ask me up to 10 questions per round, each with your recommended answer; at most 2 rounds; write the decisions to GRILL.md; then propose 2–4 slices and wait."</p></div>
+
+      <div class="watch">
+        <p class="blk">Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/specifying-a-tech-stack/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Specifying a Tech Stack</span><span class="w-time">00:22:55 · 14 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/install-custom-skills/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Install Custom Skills</span><span class="w-time">00:37:01 · 14 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+
+      <div class="checkpoint" data-ck="p1:practice">
+        <p class="blk">Checkpoint <span class="ck-count" aria-live="polite">0 / 4</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="built"> <span>The practice site runs with six cards and three themes</span></label></li>
+          <li><label><input type="checkbox" data-id="checked"> <span>The agent ran the type check itself and reported the result</span></label></li>
+          <li><label><input type="checkbox" data-id="skills"> <span>The four grilling skills are installed and show up in my agent</span></label></li>
+          <li><label><input type="checkbox" data-id="gaps"> <span>I read the agent's "not built" list</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 11. LET THE AGENT CHECK ITS OWN WORK ============ -->
+    <section class="sec" id="browser">
+      <p class="eyebrow">Verification</p>
+      <h2>Let the agent check its own work</h2>
+      <p>An agent that says "done" hasn't proved anything. The cheapest proof for a web page is a browser: open it, click, look. The agent can do that itself with <strong>Playwright</strong>, which drives a real browser from code. Ask for a <strong>headed</strong> browser (a visible window) so you can watch it click; headless runs are fine later for the agent's own quick checks.</p>
+
+      <div class="prompt-box" id="p1-prompt-browser">
+        <div class="pb-head">
+          <span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Test</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p1-prompt-browser &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">Same chat, practice folder, dev server running. Effort: <b>Medium</b>.</p>
+        <pre class="pb-text">Check the running practice site in a real, visible browser.
+
+Use Playwright with Microsoft Edge (or Google Chrome if Edge isn't installed),
+headed, not headless. If you can't open a visible window here, tell me and stop;
+don't silently switch to headless.
+
+Check these three things and give me PASS or FAIL for each, with the evidence
+(what you clicked, what text you saw):
+1. The home page shows exactly 6 auction cards.
+2. Clicking the first card opens its /items/<span class="ph">&lt;slug&gt;</span> page with the same title and price.
+3. Each of the three themes can be selected, changes the look, and is still
+   selected after a page reload.
+
+Leave the browser window open at the end so I can look. Put any screenshots in a
+temporary folder outside this project. Don't change any source files in this step.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><ul>
+          <li>"PASS or FAIL with evidence" turns a vague "looks good" into something you can check.</li>
+          <li>Forbidding a silent switch to headless matters: some agents fall back without saying so, and then claim they "saw" the page.</li>
+          <li>"Don't change any source files" keeps checking and fixing as separate steps, so a test can't quietly be bent to pass.</li>
+        </ul></details>
+      </div>
+
+      <p><strong>What you should see:</strong> a visible Edge window clicking through your site, and a 3-row PASS/FAIL table in the chat. If anything fails, <em>then</em> ask for a fix in a separate message.</p>
+
+      <div class="box win"><span class="tag">Windows</span><p>In WSL, the Edge window appears on your Windows desktop through WSLg. If Playwright says Edge isn't installed, run <code>npx playwright install --with-deps msedge</code> in Ubuntu and try again.</p></div>
+
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 12. WRITE AGENTS.MD ============ -->
+    <section class="sec" id="agents-md">
+      <p class="eyebrow">Teach the agent your project</p>
+      <h2>Write AGENTS.md</h2>
+      <p><code>AGENTS.md</code> is a plain Markdown file in the project that the agent reads at the start of every chat. It's where you put what the agent can't guess: the real commands, the rules you care about, and how to check work. Claude Code reads <code>CLAUDE.md</code> (put <code>@AGENTS.md</code> in it to reuse the same file); Antigravity uses rules (point one at <code>AGENTS.md</code>).</p>
+
+      <div class="prompt-box" id="p1-prompt-agentsmd">
+        <div class="pb-head">
+          <span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Docs</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p1-prompt-agentsmd &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">Same practice folder. Effort: <b>Medium</b>.</p>
+        <pre class="pb-text">Write an AGENTS.md for this project, for future AI agents working here.
+
+First read the project (package.json, the folder layout, the config files) so you
+only state what is true. Then write a short file, under 40 lines, with:
+- the stack and the conventions to keep (and what not to add),
+- the exact commands to install, start, type-check and test, copied from
+  package.json; if a command doesn't exist, say so instead of inventing one,
+- what "done" means here: which checks must pass and the browser check to run
+  after any change to a page.
+
+Leave out anything the code already makes obvious (lists of every file, how React
+works, generic advice like "write clean code"). Show me the file before saving it.</pre>
+      </div>
+
+      <div class="tw"><table class="tbl">
+        <thead><tr><th scope="col">Put it in</th><th scope="col">Leave it out</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Put it in">Real commands, copied from <code>package.json</code></td><td data-label="Leave it out">Commands that "should" exist</td></tr>
+          <tr><td data-label="Put it in">Rules the agent would break otherwise ("no ORM", "migrations only as SQL files")</td><td data-label="Leave it out">Things any developer knows ("use meaningful names")</td></tr>
+          <tr><td data-label="Put it in">Where work happens ("only edit the part folder you were given")</td><td data-label="Leave it out">A list of every file (it can read the tree)</td></tr>
+          <tr><td data-label="Put it in">What "done" means (tests, type check, browser check)</td><td data-label="Leave it out">Long explanations of the architecture (link a doc instead)</td></tr>
+          <tr><td data-label="Put it in">Ports and how to reset data</td><td data-label="Leave it out">Secrets, passwords, API keys</td></tr>
+        </tbody>
+      </table></div>
+
+      <p><strong>Good vs bad, side by side.</strong></p>
+      <div class="bad-good">
+        <div class="codebox" style="border-top:3px solid var(--bad)" role="img" aria-label="Too vague AGENTS.md example">
+          <div class="codebar"><span class="fname">✗ Too vague</span><button class="copy" type="button">Copy</button></div>
+          <pre><code># AGENTS.md
+This is a React project. Please write clean, maintainable,
+well-tested code and follow best practices.
+
+Use modern JavaScript. Make sure everything works.
+Run the tests before committing.
+Be careful with the database.
+The project has a src folder with components in it.
+Ask if you are unsure.</code></pre>
+        </div>
+        <div class="codebox" style="border-top:3px solid var(--good)" role="img" aria-label="Useful AGENTS.md example">
+          <div class="codebar"><span class="fname">✓ Useful</span><button class="copy" type="button">Copy</button></div>
+          <pre><code># AGENTS.md · Auction House (Part 2)
+Stack: TypeScript ESM, Fastify + Zod (server/), React + Vite (web/),
+plain `pg` + ordered SQL files in server/migrations. No ORM, no UI kit.
+
+Work only in this folder. Each part is self-contained.
+Commands: npm install · npm start (DB up, migrate, API :3102, web :5102)
+          npm test · npm run db:reset (re-seeds only auction_part_2)
+Rules: money is integer cents; validate every request body with Zod;
+       business rules (seller can't bid, +$1 minimum) live in the API.
+Done = npm test passes, both workspaces type-check (tsc --noEmit),
+       and the changed page was checked in a real browser.</code></pre>
+        </div>
+      </div>
+
+      <p class="muted small">The good one is shorter in spirit and longer in facts. Every line is something the agent could get wrong without it.</p>
+
+      <div class="box note"><span class="tag">In the repo</span><p>Look at <code>reference/AGENTS.md</code> and <code>reference/part-2-create-auction-and-bid/AGENTS.md</code>. The root file holds rules for the whole repo (stay in the core stack, keep each part self-contained, run the tests). The part file holds that part's ports, database name and checks. That two-level layout is worth copying.</p></div>
+
+      <div class="box repo"><span class="tag">Repo note</span><p>The root <code>AGENTS.md</code> also has a "workshop specific" section the author uses to make live demos flow: canonical emoji for diagrams, always-headed Playwright with tiled windows, and grilling limited to 2 rounds of 8–10 questions. Read it as an example of steering an agent's behaviour. It's in your <code>workshop/</code> copy, so your agent will follow it too, which is what you want for this course.</p></div>
+
+      <div class="watch">
+        <p class="blk">Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/browser-use-agents-md/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Browser Use &amp; Agents.md</span><span class="w-time">00:50:44 · 11 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+
+      <div class="checkpoint" data-ck="p1:agentsmd">
+        <p class="blk">Checkpoint <span class="ck-count" aria-live="polite">0 / 4</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="headed"> <span>The agent ran a headed browser check and gave PASS/FAIL with evidence</span></label></li>
+          <li><label><input type="checkbox" data-id="agentsmd"> <span>My practice AGENTS.md has real commands only, under 40 lines</span></label></li>
+          <li><label><input type="checkbox" data-id="claude"> <span>(Claude Code users) <code>CLAUDE.md</code> contains <code>@AGENTS.md</code></span></label></li>
+          <li><label><input type="checkbox" data-id="read"> <span>I read the root and Part 2 AGENTS.md in <code>reference/</code></span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 13. PART 1 STATION ============ -->
+    <section class="sec station" id="part-1" style="--pc:var(--p1)">
+      <header class="st-head">
+        <span class="st-badge">Part 1</span>
+        <h2>The foundation: is the stack alive?</h2>
+        <p class="st-goal"><b>Goal</b> One request goes from the browser to the API to PostgreSQL and back, and you can prove it.</p>
+        <p class="st-meta"><span>Folder <code>part-1-foundation</code></span><span>Web :5101 · API :3101</span><span>≈ 8 min of video</span></p>
+      </header>
+
+      <p>Part 1 is already complete in your <code>workshop</code> folder (you kept it when you emptied the others). You don't build it; you <strong>run it and read it</strong>, because every later part starts as a copy of it. Three things are set here that last the whole course: the folder layout, the stable commands, and a health check.</p>
+      <ul>
+        <li><strong>Layout.</strong> An <em>npm workspaces</em> project: one root <code>package.json</code> with two workspaces, <code>server/</code> (the Fastify API) and <code>web/</code> (the React app). One <code>npm install</code> at the root installs both.</li>
+        <li><strong>Stable commands.</strong> <code>npm start</code> does everything: makes sure PostgreSQL is running in Docker, creates this part's database if needed, runs the migrations, then starts the API and the web app together. <code>npm test</code> runs the tests. Humans and agents use the same commands, which is why they're written in <code>AGENTS.md</code>.</li>
+        <li><strong>Health check.</strong> <code>GET /api/health</code> runs <code>SELECT 1</code> against the database and reports what it found.</li>
+      </ul>
+
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Decisions you agree in the grilling</p>
+        <div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Question</th><th scope="col">Decision</th><th scope="col">Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Question">Does the app run in Docker?</td><td data-label="Decision">Only the infrastructure (PostgreSQL, later Redis, RabbitMQ, Jaeger) runs in Docker. The API and web app run on your machine.</td><td data-label="Why it matters">Fast edit-and-reload loop for the agent; no image rebuilds. Holds for all 8 parts.</td></tr>
+            <tr><td data-label="Question">How is the repo laid out?</td><td data-label="Decision">npm workspaces: <code>server/</code> and <code>web/</code>, with shared root commands.</td><td data-label="Why it matters">One place for commands; no shared package until two things need it.</td></tr>
+            <tr><td data-label="Question">How do we know Part 1 works?</td><td data-label="Decision">One vertical path: a health route that queries the database.</td><td data-label="Why it matters">The smallest proof that all three layers connect.</td></tr>
+            <tr><td data-label="Question">ORM or raw SQL?</td><td data-label="Decision">Plain <code>pg</code> and numbered <code>.sql</code> migration files, run by a 30-line script.</td><td data-label="Why it matters">Keeps the SQL visible, which matters a lot in Part 3.</td></tr>
+            <tr><td data-label="Question">How much tracing now?</td><td data-label="Decision">OpenTelemetry baseline only: auto-instrumentation printing spans to the console; request IDs in logs.</td><td data-label="Why it matters">Cheap now; it pays off in Part 8.</td></tr>
+          </tbody>
+        </table></div>
+        <p class="src">From <code>part-1-foundation/GRILL.md</code>, in our words.</p>
+      </div>
+
+      <div class="box repo"><span class="tag">Repo note</span><p>Part 1's <code>GRILL.md</code> mentions ports 5432, 3000 and 5173. Those were the first draft. The code was later moved to the per-part ports (55432, 3101, 5101) so all parts can run at once. Use the ports in <code>package.json</code> and on this page.</p></div>
+
+      <div class="prompt-box" id="p1-prompt-part1">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Review only</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p1-prompt-part1 &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">Start a <b>new chat</b> in <code>~/code/workshop/part-1-foundation</code>. Effort: <b>Medium</b>.</p>
+        <pre class="pb-text">You're in part-1-foundation of an auction-site workshop. Read AGENTS.md here and in
+the repo root, then GRILL.md, and don't change any files.
+
+1. Run: npm install, then npm start. Leave it running.
+2. In a second shell, call the health endpoint both ways and show me the raw output:
+   - directly on the API:      curl -i http://localhost:3101/api/health
+   - through the web proxy:    curl -i http://localhost:5101/api/health
+   - with my own request ID:   curl -i -H 'x-request-id: dana-1' http://localhost:3101/api/health
+3. Run npm test and show the summary line.
+4. Explain in plain English, in at most 8 bullet points:
+   - what happens between the curl and the database, file by file,
+   - what the API returns if PostgreSQL is down, and why that status code,
+   - where the request ID comes from and where it shows up,
+   - what otel.ts does and where its output goes today.
+5. Tell me one thing in this part's docs that doesn't match the code, if you find one.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><ul>
+          <li>It's a reading task first. You learn the agent's habits (does it read <code>AGENTS.md</code>? does it show raw output?) on code that already works.</li>
+          <li>The three curls prove three separate things: the API works, the web proxy forwards <code>/api</code>, and request IDs flow through.</li>
+          <li>Step 5 trains the agent (and you) to compare docs with code. There <em>is</em> a mismatch to find (see the repo note below).</li>
+        </ul></details>
+      </div>
+
+      <p><strong>Commands, if you'd rather run it yourself:</strong></p>
+      <div class="codebox">
+        <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+        <pre><code>cd ~/code/workshop/part-1-foundation
+npm install
+npm start
+# second terminal:
+curl -i http://localhost:3101/api/health
+curl -i http://localhost:5101/api/health</code></pre>
+      </div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li><code>npm start</code> prints <code>0 migrations applied</code>, then the API and Vite start (<code>Local: http://localhost:5101/</code>).</li>
+          <li>Both curls return <code>200</code> with a body like the one below; the request ID is generated (<code>req-1</code>, <code>req-2</code>…) unless you send your own.</li>
+          <li>With <code>-H 'x-request-id: dana-1'</code> the same ID comes back in the <code>x-request-id</code> header <strong>and</strong> the body.</li>
+          <li><code>npm test</code> shows 1 passed test.</li>
+          <li>The API terminal prints a stream of span objects (that's the OpenTelemetry console exporter).</li>
+        </ul>
+        <div class="term" role="img" aria-label="Terminal output: npm start applies 0 migrations and starts the server and Vite; a curl with request ID dana-1 returns HTTP 200 with the same ID in the header and the body.">
+          <div class="term-bar"><i></i><i></i><i></i><span>Terminal · part-1-foundation</span></div>
+          <pre><span class="ps">$</span> npm start
+…
+0 migrations applied
+[server] {"level":30,…,"msg":"Server listening at http://[::1]:3101"}
+[web]   VITE v7.2.4  ready in 412 ms
+[web]   ➜  Local:   http://localhost:5101/
+<span class="ps">$</span> curl -i -H 'x-request-id: dana-1' http://localhost:3101/api/health
+<span class="hl">HTTP/1.1 200 OK</span>
+x-request-id: <span class="hl">dana-1</span>
+content-type: application/json; charset=utf-8
+
+{"ok":true,"db":"ok","requestId":"<span class="hl">dana-1</span>"}</pre>
+        </div>
+      </div>
+
+      <p><strong>Try it:</strong> stop PostgreSQL with <code>docker compose -f ../docker-compose.yml stop postgres</code> and call the health route again. You should get <code>503</code> and <code>{"ok":false,"db":"down",…}</code> within about a second (the pool gives up after 1 s). Start it again with <code>npm run db:up</code>.</p>
+
+      <div class="box repo"><span class="tag">Repo note: the web page doesn't call /api/health</span><p>Part 1's docs say the React page fetches <code>/api/health</code> and shows the result. The finished <code>web/src/App.tsx</code> doesn't: it's the auction catalogue from the warm-up, with data from a local file. The health route exists only on the API. So check it with curl or by opening http://localhost:5101/api/health in the browser (the Vite proxy forwards it). It's a good example of docs drifting from code, which is exactly what step 5 of the prompt asks the agent to catch.</p></div>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: the health route <span class="cr-path">part-1-foundation/server/src/app.ts · 14–22</span></summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-1-foundation/server/src/app.ts</code> · lines 14–22 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-1-foundation/server/src/app.ts#L14-L22" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">app.ts · lines 14–22</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="14">  app.get('/api/health', async (request, reply) =&gt; {</span>
+<span class="l" data-n="15">    try {</span>
+<span class="l hl" data-n="16">      await pool.query('SELECT 1');</span>
+<span class="l" data-n="17">      return { ok: true, db: 'ok', requestId: request.id };</span>
+<span class="l" data-n="18">    } catch (error) {</span>
+<span class="l" data-n="19">      request.log.error({ err: error }, 'database health check failed');</span>
+<span class="l hl" data-n="20">      return reply.code(503).send({ ok: false, db: 'down', requestId: request.id });</span>
+<span class="l" data-n="21">    }</span>
+<span class="l" data-n="22">  });</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>14</code> The route is registered on the Fastify app built in <code>buildApp()</code>. Building the app in a function (instead of starting a server at import time) lets the test call it with <code>app.inject</code> without opening a port.</li>
+            <li><code>16</code> <code>SELECT 1</code> is the cheapest possible query. If it returns, the connection, the credentials and the database all work.</li>
+            <li><code>17</code> The body echoes <code>request.id</code>, which Fastify takes from the incoming <code>x-request-id</code> header (or generates as <code>req-1</code>, <code>req-2</code>…). An <code>onRequest</code> hook (lines 10–12) also puts it in the response header.</li>
+            <li><code>18–20</code> Any failure is logged with the error and answered with <strong>503 Service Unavailable</strong>: "I'm up, but a dependency isn't." That's the right code for a health check, so a load balancer can stop sending traffic.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: the tracing baseline <span class="cr-path">part-1-foundation/server/src/otel.ts · 1–11</span></summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-1-foundation/server/src/otel.ts</code> · lines 1–11 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-1-foundation/server/src/otel.ts#L1-L11" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">otel.ts · lines 1–11</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="1">import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';</span>
+<span class="l" data-n="2">import { NodeSDK } from '@opentelemetry/sdk-node';</span>
+<span class="l" data-n="3">import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';</span>
+<span class="l" data-n="4"></span>
+<span class="l hl" data-n="5">const sdk = new NodeSDK({</span>
+<span class="l hl" data-n="6">  serviceName: 'auction-server',</span>
+<span class="l hl" data-n="7">  traceExporter: new ConsoleSpanExporter(),</span>
+<span class="l hl" data-n="8">  instrumentations: [getNodeAutoInstrumentations()],</span>
+<span class="l hl" data-n="9">});</span>
+<span class="l" data-n="10"></span>
+<span class="l" data-n="11">sdk.start();</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>5–9</code> The OpenTelemetry SDK starts with <em>auto-instrumentations</em>: it wraps Node's HTTP, Fastify and <code>pg</code> so every request and query becomes a <strong>span</strong> (a timed record of one operation) automatically.</li>
+            <li><code>7</code> For now spans go to the console. In Part 8 this exporter is replaced with one that sends to Jaeger, and most of these automatic spans are filtered out as noise.</li>
+            <li>Note in <code>index.ts</code> that <code>otel.ts</code> is imported <strong>before</strong> the app is loaded. Instrumentation has to be in place before the libraries it wraps are imported, or it can't wrap them.</li>
+          </ol>
+        </div>
+      </details>
+
+      <div class="checkpoint" data-ck="p1:part-1">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 6</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="start"> <span><code>npm start</code> runs Part 1 and prints <code>0 migrations applied</code></span></label></li>
+          <li><label><input type="checkbox" data-id="health"> <span><code>/api/health</code> returns 200 on :3101 and through :5101</span></label></li>
+          <li><label><input type="checkbox" data-id="reqid"> <span>My own <code>x-request-id</code> comes back in the header and the body</span></label></li>
+          <li><label><input type="checkbox" data-id="down"> <span>With PostgreSQL stopped, health returns 503</span></label></li>
+          <li><label><input type="checkbox" data-id="test"> <span><code>npm test</code> passes</span></label></li>
+          <li><label><input type="checkbox" data-id="mismatch"> <span>I found (or the agent found) where Part 1's docs and code disagree</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/create-auctions-bids-site/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Create Auctions &amp; Bids Site</span><span class="w-time">01:01:35 · 8 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 14. GRILLING ============ -->
+    <section class="sec" id="grilling">
+      <p class="eyebrow">The habit that matters most</p>
+      <h2>Plan before you build: grilling</h2>
+      <p>Here is the most useful idea in the course. Before the agent writes any feature code, it <strong>interviews you</strong>. It reads the repo, then asks questions about the parts of your request that are unclear, each with a recommended answer. You reply. The decisions are written into a file (<code>GRILL.md</code>). Then it proposes the work as small slices and waits for your approval.</p>
+      <p>Why bother? Because the expensive mistakes aren't typos; they're misunderstandings. "Let people bid" hides a dozen choices: Who are "people" without a login? How is money stored? How much higher must a bid be? Who enforces it, the page or the server? What happens to bids after the deadline? If you don't decide, the agent decides silently, and you find out three slices later.</p>
+      <p>Grilling also leaves a record. A fresh chat, a teammate, or a second agent can read <code>GRILL.md</code> and know what was agreed, without the conversation.</p>
+
+      <div class="sim" id="sim-grill" data-sim="grill" aria-labelledby="sim-grill-h">
+        <span class="tag">Simulator</span><h4 id="sim-grill-h">Grill-me demo</h4>
+        <p class="sim-intro">Try it. You're starting Part 2. The agent has read the repo and asks four questions. Pick an answer; try a 'wrong' one to see the agent push back.</p>
+      </div>
+
+      <div class="box note"><span class="tag">How long to grill</span><p>The course limits grilling to <strong>two rounds</strong> of up to 8–10 questions, to keep the videos short. The instructor says that in real work he keeps going until nothing is unclear. A good rule: stop when the agent's questions start being about things you genuinely don't care about, and say so ("use your recommendation for the rest").</p></div>
+
+      <div class="box key"><span class="tag">Key lesson</span><p>Rules that protect the business, such as "a seller can't bid on their own auction" or "a bid must be at least $1 higher", belong in the <strong>API</strong>, not only in the page. Anyone can send a request to the API without using your form. The page may show the rule; the server must enforce it.</p></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 15. PLAN PART 2 (planning-only station) ============ -->
+    <section class="sec station" id="plan-part-2" style="--pc:var(--p2)">
+      <header class="st-head">
+        <span class="st-badge">Part 2 · plan</span>
+        <h2>Open Part 2's design: grill, decide, slice</h2>
+        <p class="st-goal"><b>Goal</b> Agree what "post auctions and place bids" means, on paper, before a line of feature code exists.</p>
+        <p class="st-meta"><span>Folder <code>part-2-create-auction-and-bid</code></span><span>Web :5102 · API :3102</span><span>≈ 18 min of video</span></p>
+      </header>
+
+      <p>Part 2 starts as a copy of Part 1. Make the copy yourself so the agent can't "helpfully" start from somewhere else:</p>
+      <div class="codebox">
+        <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+        <pre><code>cd ~/code/workshop
+rsync -a --exclude node_modules part-1-foundation/ part-2-create-auction-and-bid/
+git add -A &amp;&amp; git commit -m "Part 2: start from a copy of Part 1"</code></pre>
+      </div>
+      <p>(<code>rsync</code> is on macOS and in Ubuntu. The trailing slashes matter: they copy the <em>contents</em> of Part 1 into Part 2.)</p>
+      <p>Then update the copy's ports and database name so Part 2 doesn't fight Part 1. You can do it in the same prompt (the agent will), or by hand: in <code>part-2…/package.json</code> change <code>auction_part_1</code> → <code>auction_part_2</code>, <code>3101</code> → <code>3102</code>, <code>5101</code> → <code>5102</code>, and the same defaults in <code>server/src/app.ts</code>, <code>server/src/index.ts</code>, <code>server/src/migrate.ts</code> and <code>web/vite.config.ts</code>.</p>
+
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Decisions you agree in the grilling</p>
+        <div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Question</th><th scope="col">Decision</th><th scope="col">Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Question">Who are the users?</td><td data-label="Decision">Ten demo users, seeded in the database. No login. A footer switcher picks the active user; each new browser tab starts as a random user and keeps it through reloads (<code>sessionStorage</code>). The header shows the active user's name.</td><td data-label="Why it matters">Lets you test "seller vs bidder" in two tabs without building authentication.</td></tr>
+            <tr><td data-label="Question">How is money stored?</td><td data-label="Decision">US dollars as <strong>integer cents</strong> (<code>$101.50</code> = <code>10150</code>).</td><td data-label="Why it matters">No floating-point rounding; the database can compare amounts exactly.</td></tr>
+            <tr><td data-label="Question">What does a listing need?</td><td data-label="Decision">Title, category, description, condition, location, starting price and a future closing time. The seller is the active user. Listings publish immediately.</td><td data-label="Why it matters">A complete form that maps one-to-one to table columns.</td></tr>
+            <tr><td data-label="Question">How is time stored?</td><td data-label="Decision">Closing times in <strong>UTC</strong> (<code>timestamptz</code>).</td><td data-label="Why it matters">Everyone agrees on when 6:00 pm is, whatever their time zone.</td></tr>
+            <tr><td data-label="Question">Pictures?</td><td data-label="Decision">Pick an illustration by category. No uploads, no external image links.</td><td data-label="Why it matters">Keeps the slice about auctions, not file storage.</td></tr>
+            <tr><td data-label="Question">Who may bid?</td><td data-label="Decision">Anyone except the seller of that auction.</td><td data-label="Why it matters">A seller bidding up their own item is shill bidding. Enforced by the API.</td></tr>
+            <tr><td data-label="Question">What's a valid bid?</td><td data-label="Decision">At least <strong>$1 above</strong> the current amount, checked by the API. Ended auctions stay visible but reject bids. Every accepted bid is stored with bidder, amount and time.</td><td data-label="Why it matters">The rule lives where nobody can skip it.</td></tr>
+            <tr><td data-label="Question">Two bids at the same moment?</td><td data-label="Decision">Only ordinary, one-at-a-time behaviour is promised in Part 2. Simultaneous bids are <strong>deferred to Part 3</strong>.</td><td data-label="Why it matters">Written down as known and deferred, so it can't be forgotten.</td></tr>
+            <tr><td data-label="Question">Resetting demo data?</td><td data-label="Decision"><code>npm run db:reset</code> drops and recreates <strong>only</strong> <code>auction_part_2</code>, restoring the ten users and six seeded auctions. Normal restarts keep data.</td><td data-label="Why it matters">Safe to reset one part while others run.</td></tr>
+          </tbody>
+        </table></div>
+        <p class="src">From <code>part-2-create-auction-and-bid/GRILL.md</code>, in our words.</p>
+      </div>
+
+      <div class="prompt-box" id="p1-prompt-plan2">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Plan first</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p1-prompt-plan2 &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> in <code>~/code/workshop</code> (the repo root, so it can see <code>docker-compose.yml</code>). Use plan mode / Planning mode if your agent has it. Effort: <b>Medium or High</b>.</p>
+        <pre class="pb-text">We're starting Part 2 of the auction site. Work only in part-2-create-auction-and-bid,
+which is currently a copy of part-1-foundation. Don't read or copy from any other
+part-N folder.
+
+Goal: people can post auctions and place bids, and both are stored in the PostgreSQL
+service defined in docker-compose.yml (the shared one on port 55432).
+
+First, housekeeping in part 2 only: change the database name to auction_part_2 and
+the ports to API 3102 / web 5102 everywhere they appear (package.json scripts and
+the defaults in server and web config). Show me the diff.
+
+Then grill me, using the grill-with-docs skill if you have it:
+- Read this part's AGENTS.md and GRILL.md and the code first. Don't ask what the code
+  already answers.
+- Ask at most 10 questions per round, at most 2 rounds. Number them. For each, give
+  your recommended answer and one line on the trade-off.
+- Cover at least: who the users are without a login, how money is stored, what a
+  valid bid is and who enforces it, what happens at and after the closing time,
+  what happens if two people bid at the same moment, and how to reset demo data.
+- Write the agreed decisions to part-2-create-auction-and-bid/GRILL.md as you go.
+
+Then propose 2-4 vertical slices. Each slice must end with something I can check in
+the browser, and list the tests that will prove it.
+
+Do not write any feature code until I reply "approved".</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><ul>
+          <li>"Don't read or copy from any other part-N folder" stops it from finding the reference solution in <code>workshop</code> later (and from mixing parts).</li>
+          <li>The housekeeping step is small, mechanical and checkable. It gets the agent working in the right folder before the big conversation.</li>
+          <li>Listing the topics you want covered prevents a grill that only asks about colours and button labels.</li>
+          <li>"Recommended answer + trade-off" makes each question quick to answer: you can just say "agree with 1–6".</li>
+          <li>The final line is the gate. Nothing gets built until you say the word.</li>
+        </ul></details>
+        <details class="pb-steer"><summary>If the agent goes off track, steer with</summary><pre class="pb-text">Stop writing code. We're still planning: undo the changes to src/ and keep only the
+port and database-name edits. Ask me the remaining questions, then write GRILL.md and
+the slice list, and wait for "approved".</pre><button type="button" class="copy" data-copy="this-pre">Copy</button></details>
+      </div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li>a short diff that only changes <code>auction_part_1</code> → <code>auction_part_2</code> and the ports;</li>
+          <li>one or two rounds of numbered questions, each with a recommendation;</li>
+          <li>a <code>GRILL.md</code> in Part 2 containing your decisions;</li>
+          <li>a slice list close to this one, and <strong>no</strong> new feature code:
+            <ol>
+              <li>Catalogue from the database, plus the demo-user switcher.</li>
+              <li>Post an auction as the active user.</li>
+              <li>Place, validate and list bids.</li>
+            </ol>
+          </li>
+          <li>(Codex users following the root <code>AGENTS.md</code> will also get a small Mermaid architecture diagram. That's the author's workshop rule, and it's useful.)</li>
+        </ul>
+        <p><strong>Mock GRILL.md</strong></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">part-2-create-auction-and-bid/GRILL.md (yours will differ)</span><button class="copy" type="button">Copy</button></div>
+          <pre><code># GRILL.md · Part 2: create auctions and bid
+## Actors
+- 10 seeded demo users; footer switcher; no auth; each tab keeps its own user
+## Money and bidding
+- USD, integer cents. A bid must be &gt;= current + 100 cents; the API enforces it.
+- Sellers can't bid on their own auctions. Ended auctions reject bids.
+- Part 2 is sequential only. Simultaneous bids: deferred to Part 3.
+## Delivery slices
+1. Catalogue from PostgreSQL + user switching
+2. Post an auction as the active user
+3. Place, validate, persist and list bids</code></pre>
+        </div>
+      </div>
+
+      <div class="checkpoint" data-ck="p1:plan-2">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 5</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="copy"> <span>Part 2 started as a copy of Part 1, committed</span></label></li>
+          <li><label><input type="checkbox" data-id="ports"> <span>Part 2 uses <code>auction_part_2</code>, API 3102, web 5102</span></label></li>
+          <li><label><input type="checkbox" data-id="grill"> <span>I was grilled (at most 2 rounds) and answered every question</span></label></li>
+          <li><label><input type="checkbox" data-id="grillmd"> <span><code>part-2…/GRILL.md</code> holds the decisions above</span></label></li>
+          <li><label><input type="checkbox" data-id="slices"> <span>The agent proposed slices and stopped, with no feature code written</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/plan-mode-grilling/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Plan Mode &amp; Grilling</span><span class="w-time">01:09:21 · 18 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 16. QUIZ ============ -->
+    <section class="sec" id="quiz">
+      <p class="eyebrow">Quiz</p>
+      <h2>Check yourself</h2>
+      <div class="quiz" data-quiz="p1">
+        <fieldset class="q" data-answer="c">
+          <legend><span class="q-n">1</span> Where must the rule "a seller can't bid on their own auction" be enforced?</legend>
+          <label><input type="radio" name="p1q1" value="a"> <span>In the bid form, by hiding the Bid button for the seller</span></label>
+          <label><input type="radio" name="p1q1" value="b"> <span>In <code>AGENTS.md</code>, so the agent remembers it</span></label>
+          <label><input type="radio" name="p1q1" value="c"> <span>In the API, which rejects the request (the page may also hide the button)</span></label>
+          <label><input type="radio" name="p1q1" value="d"> <span>Nowhere yet; it's a Part 3 concern</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>Anyone can send a request straight to the API without your page. The page can hint; only the server can enforce. (In Part 3, the check moves inside the database transaction.)</p>
+        </fieldset>
+        <fieldset class="q" data-answer="a">
+          <legend><span class="q-n">2</span> Which of these belongs in <code>AGENTS.md</code>?</legend>
+          <label><input type="radio" name="p1q2" value="a"> <span>The real start and test commands, and what "done" means (tests, type check, browser check)</span></label>
+          <label><input type="radio" name="p1q2" value="b"> <span>A list of every file in the project</span></label>
+          <label><input type="radio" name="p1q2" value="c"> <span>"Write clean, well-tested code."</span></label>
+          <label><input type="radio" name="p1q2" value="d"> <span>The database password and an API key, so the agent can connect</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>AGENTS.md is for facts the agent can't guess and would otherwise get wrong. Generic advice adds nothing, file lists go stale, and secrets never go in the repo.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="d">
+          <legend><span class="q-n">3</span> Why does the workshop copy start with <code>rm -rf .git</code> and empty Part 2–8 folders?</legend>
+          <label><input type="radio" name="p1q3" value="a"> <span>To save disk space</span></label>
+          <label><input type="radio" name="p1q3" value="b"> <span>Git can't handle eight folders</span></label>
+          <label><input type="radio" name="p1q3" value="c"> <span>Because the repo's history is broken</span></label>
+          <label><input type="radio" name="p1q3" value="d"> <span>So the agent can't copy the finished parts or read the commit that planted Part 5's bug</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>You're practising steering an agent. If the answers are in the folder or the history, the agent will find them and you'll learn nothing about planning or review.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="b">
+          <legend><span class="q-n">4</span> On Windows, why does this course use WSL2 instead of PowerShell?</legend>
+          <label><input type="radio" name="p1q4" value="a"> <span>Docker doesn't run on Windows</span></label>
+          <label><input type="radio" name="p1q4" value="b"> <span>The repo's npm scripts set variables the Unix way and call a <code>sh</code> script, so they fail in PowerShell</span></label>
+          <label><input type="radio" name="p1q4" value="c"> <span>Node.js isn't available for Windows</span></label>
+          <label><input type="radio" name="p1q4" value="d"> <span>Playwright only works on Linux</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>Scripts like <code>API_PORT=3101 npm run dev</code> and <code>../scripts/workshop-db</code> assume a Unix shell. WSL2 gives you one, and Docker Desktop's WSL engine runs the containers.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="a">
+          <legend><span class="q-n">5</span> Part 1's health route returns <code>503</code> when PostgreSQL is down. Why 503 and not 500?</legend>
+          <label><input type="radio" name="p1q5" value="a"> <span>503 means "the service itself is fine but can't serve right now, often because a dependency is down", which is what a load balancer needs to know</span></label>
+          <label><input type="radio" name="p1q5" value="b"> <span>500 is reserved for Fastify</span></label>
+          <label><input type="radio" name="p1q5" value="c"> <span>503 is shorter to type</span></label>
+          <label><input type="radio" name="p1q5" value="d"> <span>Because the test expects it</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>A 500 says "I have a bug". A 503 says "I'm temporarily unable", so traffic can be routed elsewhere until the database is back.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="d">
+          <legend><span class="q-n">6</span> In a grilling session, the agent asks "How should money be stored?" and recommends integer cents. What's the best reply if you don't have a strong view?</legend>
+          <label><input type="radio" name="p1q6" value="a"> <span>Ignore the question and ask it to start coding</span></label>
+          <label><input type="radio" name="p1q6" value="b"> <span>Say "use floats, it's simpler"</span></label>
+          <label><input type="radio" name="p1q6" value="c"> <span>Ask it to decide later, after building</span></label>
+          <label><input type="radio" name="p1q6" value="d"> <span>Accept the recommendation, and let it write the decision into GRILL.md</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>Recommendations exist so you can move quickly on things you don't care about. The decision still gets written down, so it's explicit, not silent.</p>
+        </fieldset>
+        <p class="quiz-score" aria-live="polite">Answered 0 of 6</p>
+        <button type="button" class="btn ghost quiz-reset">Try again</button>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 17. NEXT ============ -->
+    <section class="sec" id="next">
+      <p class="eyebrow">What's next</p>
+      <h2>Next: build it</h2>
+      <p>You have a working machine, an agent that reads your rules, a running foundation and an approved plan for Part 2. On the next page you'll say "approved" and build: auctions and bids, then the bidding-war bug, then the row-lock fix, then live updates.</p>
+
+      <!-- link cards for "Next" -->
+      <div class="linkcards"><a href="../../"><b>← AWS AI Capstone</b>all projects</a><a href="./pages/live-auction-build/"><b>Part 2 of 3 · Build it: Parts 1–4 →</b>Build the three slices of Part 2, prove the race with a four-window bidding war, fix it with a row lock, and push bids live.</a></div>
+    </section>
+
+<!-- awsq:bottom -->
+<div class="awsq awsq-bottom" role="navigation" aria-label="Capstone navigation (bottom)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 19 of 23 · Part 1 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../automate-push-code-deployment/"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions</span></a><a class="awsq-home" href="../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="./pages/live-auction-build/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="cur" href="./" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent" aria-current="page">P19·1</a></li><li><a class="" href="./pages/live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="" href="./pages/live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="" href="../nova-brown-blog-writer/" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="" href="../nova-brown-blog-writer/pages/nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="" href="../nova-brown-blog-writer/pages/nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/archive/refs/heads/master.zip">⬇ Download all<small>.zip from GitHub</small></a></div></div></div>
+<!-- /awsq:bottom -->
+  </main>
+</div>
+
+<footer class="foot">
+  <div class="foot-in">
+    <p><b>Live Auction House</b> follows <a href="https://master.dev/courses/fullstack-app-codex/" target="_blank" rel="noopener"><i>Build a Fullstack App with Codex</i></a>
+    by Spencer Schneidenbach on master.dev, and his public
+    <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">course repo</a>.
+    The explanations, prompts, simulators and quizzes on this page are our own; the code excerpts are from that repo, with links to the exact lines.</p>
+    <p class="muted">Previous / next: <a href="../../">AWS AI Capstone</a> · <a href="./pages/live-auction-build/">Next: Part 2 of 3 →</a></p>
+  </div>
+</footer>
+<script src="assets/js/f88dabf3c70aec22.js"></script>
+<script>
+document.querySelectorAll('.mobile-toc a').forEach(a => a.addEventListener('click', () => a.closest('details').open = false));
+</script>
+</body>
+</html>

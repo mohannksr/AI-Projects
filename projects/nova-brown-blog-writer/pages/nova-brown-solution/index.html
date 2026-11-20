@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="../../../../favicon.svg"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Solution walkthrough: how the Nova research agent and the Brown writing agent are built, connected over MCP and evaluated.">
+<title>Project 20 · Part 2 · Nova + Brown blog writer · Solution walkthrough · AWS AI Capstone</title>
+<meta name="author" content="Shivank Agarwal">
+<style>
+  :root {
+    --paper: #F4F6F8;
+    --sheet: #FFFFFF;
+    --ink: #18212F;
+    --muted: #5B6676;
+    --rule: #D5DBE3;
+    --nova: #0B7A75;
+    --nova-tint: #E3F2F1;
+    --brown: #7A4A2B;
+    --brown-tint: #F3EAE3;
+    --pencil: #2C55D6;
+    --pencil-tint: #E8EDFC;
+    --code-bg: #1B2433;
+    --code-ink: #E3E8EF;
+    --term-bg: #142033;
+    --term-dim: #8C9AB0;
+    --term-ok: #7FD4A6;
+    --term-info: #8FB7FF;
+    --term-warn: #F2C66D;
+    --serif: "Charter", "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
+    --sans: "Avenir Next", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 18px; line-height: 1.68; }
+  a { color: var(--pencil); text-underline-offset: 3px; }
+  a:focus-visible, summary:focus-visible { outline: 3px solid var(--pencil); outline-offset: 3px; border-radius: 2px; }
+
+  .shell { max-width: 76rem; margin: 0 auto; padding: 0 1.5rem; }
+  header.masthead { padding-top: 3.5rem; padding-bottom: 1rem; }
+  .brand { font-family: var(--sans); font-size: 0.95rem; color: var(--muted); margin: 0 0 2.2rem; }
+  .brand strong { color: var(--ink); font-weight: 650; }
+  h1 { font-family: var(--sans); font-weight: 750; font-size: clamp(2.1rem, 4.6vw, 3.3rem); line-height: 1.08; letter-spacing: -0.02em; margin: 0 0 1rem; max-width: 22ch; }
+  .dek { font-size: 1.22rem; line-height: 1.55; color: var(--muted); max-width: 44rem; margin: 0 0 2.4rem; }
+
+  figure.diagram { margin: 1.4rem 0 1.8rem; background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 1.2rem 1rem 0.6rem; }
+  figure.diagram .scroll { overflow-x: auto; }
+  figure.diagram svg { display: block; width: 100%; height: auto; }
+  figure.diagram.hero svg { min-width: 760px; }
+  figure.diagram.loop svg { min-width: 640px; }
+  figure.diagram figcaption { font-family: var(--sans); font-size: 0.9rem; color: var(--muted); padding: 0.5rem 0.6rem 0.2rem; }
+
+  dl.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem 1.5rem; margin: 0 0 1rem; }
+  dl.facts div { border-top: 2px solid var(--ink); padding-top: 0.6rem; }
+  dl.facts dt { font-family: var(--sans); font-size: 0.88rem; color: var(--muted); }
+  dl.facts dd { margin: 0.15rem 0 0; font-family: var(--sans); font-size: 1.05rem; font-weight: 650; line-height: 1.35; }
+
+  .layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 3.5rem; padding-bottom: 5rem; }
+  nav.toc { position: sticky; top: 1.5rem; align-self: start; max-height: calc(100vh - 3rem); overflow-y: auto; font-family: var(--sans); font-size: 0.92rem; padding-top: 2.6rem; }
+  nav.toc p { font-weight: 650; margin: 0 0 0.6rem; }
+  nav.toc ol { list-style: none; padding: 0; margin: 0; }
+  nav.toc li { margin: 0; }
+  nav.toc a { display: block; padding: 0.28rem 0 0.28rem 0.75rem; border-left: 2px solid var(--rule); color: var(--muted); text-decoration: none; line-height: 1.35; }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--ink); }
+  nav.toc ol ol a { padding-left: 1.5rem; font-size: 0.86rem; }
+
+  main.content { min-width: 0; }
+  main.content > section > * { max-width: 47rem; }
+  main.content > section > figure, main.content > section > .wide { max-width: 100%; }
+
+  h2 { font-family: var(--sans); font-weight: 720; font-size: 1.75rem; letter-spacing: -0.01em; line-height: 1.22; margin: 3.4rem 0 0.9rem; padding-top: 0.6rem; scroll-margin-top: 1rem; }
+  h2 .n { color: var(--muted); font-weight: 600; margin-right: 0.45rem; }
+  h3 { font-family: var(--sans); font-weight: 660; font-size: 1.18rem; margin: 2.2rem 0 0.45rem; scroll-margin-top: 1rem; }
+  h4 { font-family: var(--sans); font-weight: 650; font-size: 1rem; margin: 1.5rem 0 0.3rem; }
+  p { margin: 0 0 1.1rem; }
+  ul, ol { padding-left: 1.3rem; margin: 0 0 1.2rem; }
+  li { margin: 0.35rem 0; }
+  code { font-family: var(--mono); font-size: 0.85em; background: #E4E9EF; padding: 0.1em 0.35em; border-radius: 4px; }
+  strong { font-weight: 700; }
+  p code, li code { overflow-wrap: anywhere; }
+
+  .nova-c { color: var(--nova); font-weight: 700; }
+  .brown-c { color: var(--brown); font-weight: 700; }
+
+  /* code + file labels */
+  .filelabel { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); margin: 1.3rem 0 0; overflow-wrap: anywhere; }
+  pre { background: var(--code-bg); color: var(--code-ink); font-family: var(--mono); font-size: 0.8rem; line-height: 1.62; padding: 1rem 1.15rem; border-radius: 10px; overflow-x: auto; margin: 0.5rem 0 1.5rem; }
+  pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+  pre .c { color: #8C9AB0; }
+  pre .k { color: #F2A65A; }
+  pre .s { color: #A6D98E; }
+  pre .f { color: #8FB7FF; }
+
+  /* terminal */
+  figure.term { margin: 0.9rem 0 1.7rem; }
+  figure.term .bar { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; background: #22324A; color: #C9D4E3; font-family: var(--sans); font-size: 0.82rem; padding: 0.5rem 0.9rem; border-radius: 10px 10px 0 0; }
+  figure.term .bar .kind { white-space: nowrap; }
+  figure.term .bar .kind.real { color: var(--term-ok); }
+  figure.term .bar .kind.ill { color: var(--term-warn); }
+  figure.term pre { margin: 0; border-radius: 0 0 10px 10px; background: var(--term-bg); font-size: 0.78rem; }
+  figure.term figcaption { font-family: var(--sans); font-size: 0.86rem; color: var(--muted); margin-top: 0.45rem; }
+  .t-p { color: var(--term-dim); }
+  .t-cmd { color: #FFFFFF; font-weight: 600; }
+  .t-ok { color: var(--term-ok); }
+  .t-info { color: var(--term-info); }
+  .t-warn { color: var(--term-warn); }
+  .t-dim { color: var(--term-dim); }
+  .t-tool { color: #7FD8E0; }
+  .t-you { color: #FFFFFF; font-weight: 600; }
+
+  /* editor's margin notes: the "why" behind choices */
+  .why { border-left: 3px solid var(--pencil); background: var(--pencil-tint); padding: 0.85rem 1.1rem; margin: 1rem 0 1.4rem; color: #23345F; }
+  .why p { margin: 0 0 0.5rem; }
+  .why p:last-child { margin: 0; }
+  .why .lead { font-family: var(--sans); font-weight: 650; font-size: 0.92rem; color: var(--pencil); margin-bottom: 0.3rem; }
+  .why em { font-style: italic; }
+
+  .decision { border-top: 1px solid var(--rule); padding-top: 0.4rem; margin-top: 1.8rem; }
+  .decision h3 { margin-top: 0.8rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; margin: 0.7rem 0 1.6rem; }
+  th, td { text-align: left; vertical-align: top; padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--rule); }
+  th { font-family: var(--sans); font-weight: 650; font-size: 0.88rem; color: var(--muted); }
+  td code { font-size: 0.8em; white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
+
+  ol.steps { list-style: none; padding: 0; counter-reset: s; margin: 1rem 0 1.5rem; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 0.1rem 0 1rem 3rem; margin: 0 0 0 0.9rem; border-left: 2px solid var(--nova-tint); }
+  ol.steps > li::before { content: counter(s); position: absolute; left: -0.95rem; top: 0.05rem; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--sheet); border: 2px solid var(--nova); color: var(--nova); font-family: var(--sans); font-weight: 750; font-size: 0.85rem; display: grid; place-items: center; }
+  ol.steps > li:last-child { border-left-color: transparent; }
+  ol.steps.brownish > li { border-left-color: var(--brown-tint); }
+  ol.steps.brownish > li::before { border-color: var(--brown); color: var(--brown); }
+  ol.steps.plain > li { border-left-color: #E1E6EC; }
+  ol.steps.plain > li::before { border-color: var(--ink); color: var(--ink); }
+  ol.steps strong.t { font-family: var(--sans); }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 0.8rem 0 1.6rem; }
+  .compare > div { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 0.9rem 1rem; font-size: 0.9rem; line-height: 1.55; }
+  .compare h4 { margin: 0 0 0.5rem; font-size: 0.92rem; color: var(--muted); }
+  .compare .after { border-color: var(--brown); }
+  .compare .after h4 { color: var(--brown); }
+  .compare .md-h { font-family: var(--sans); font-weight: 700; display: block; margin: 0.5rem 0 0.2rem; }
+  .compare mark { background: #FFF1B8; padding: 0 0.1em; }
+
+  details.qa { border-top: 1px solid var(--rule); padding: 0.75rem 0; }
+  details.qa:last-of-type { border-bottom: 1px solid var(--rule); }
+  details.qa summary { cursor: pointer; font-family: var(--sans); font-weight: 650; font-size: 1.02rem; list-style: none; display: flex; gap: 0.7rem; align-items: baseline; }
+  details.qa summary::-webkit-details-marker { display: none; }
+  details.qa summary::before { content: "+"; font-weight: 700; color: var(--pencil); width: 1rem; flex: none; }
+  details.qa[open] summary::before { content: "\2212"; }
+  details.qa .a { padding: 0.6rem 0 0.2rem 1.7rem; }
+  details.qa .a p:last-child { margin-bottom: 0.4rem; }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); font-family: var(--sans); font-size: 0.9rem; color: var(--muted); }
+
+  @media (max-width: 1080px) {
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    nav.toc { position: static; max-height: none; padding-top: 1rem; border-bottom: 1px solid var(--rule); padding-bottom: 1rem; }
+    dl.facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    body { font-size: 17px; }
+    .compare { grid-template-columns: 1fr; }
+    th, td { padding: 0.5rem 0.4rem; }
+    dl.facts { grid-template-columns: 1fr 1fr; }
+  }
+  @media print {
+    body { background: #fff; }
+    nav.toc { display: none; }
+    .layout { grid-template-columns: 1fr; }
+    details.qa { display: block; }
+    pre { white-space: pre-wrap; }
+  }
+</style>
+</head>
+<body>
+<!-- awsq:top -->
+<style>
+.awsq{--q-card:var(--card,var(--surface,#fff));--q-card2:var(--card-2,var(--surface-2,#f3f3f0));--q-rule:var(--rule,var(--line,#ddd));
+  --q-ink:var(--ink,#1a1a1a);--q-muted:var(--muted,#666);--q-acc:var(--tool,var(--accent,#0b7f73));--q-acc-t:var(--tool-t,var(--accent-soft,#d6f2ee));
+  --q-acc-ink:var(--tool-ink,var(--accent,#075a51));--q-cur:var(--brain,var(--gold,#b07600));--q-on:var(--card,var(--surface,#fff));
+  --q-focus:var(--focus,var(--accent,#2958c4));--q-mono:var(--font-mono,"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace);
+  max-width:72rem;margin:18px auto;padding:0 40px;font-family:var(--font-body,inherit)}
+.awsq-box{background:var(--q-card);border:1px solid var(--q-rule);border-radius:12px;padding:12px 14px}
+.awsq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}
+.awsq-cap{display:block;margin:0;font:600 .7rem/1.4 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-row{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.awsq-l{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;padding:9px 13px;border-radius:9px;border:1px solid var(--q-rule);color:var(--q-ink);text-decoration:none;font-size:.95rem;line-height:1.3}
+a.awsq-l:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-next{text-align:right;align-items:flex-end}
+.awsq-d{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--q-acc)}
+.awsq-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+span.awsq-l{border-style:dashed;color:var(--q-muted)} span.awsq-l .awsq-d,span.awsq-l .awsq-t{color:var(--q-muted);font-weight:400}
+a.awsq-home{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:6px 12px;border-radius:9px;text-decoration:none;color:var(--q-ink);text-align:center;font-size:.85rem;line-height:1.3}
+a.awsq-home:hover{background:var(--q-card2);text-decoration:none}
+.awsq-home b{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-steps{display:flex;gap:5px;margin:11px 0 0;padding:0;list-style:none}
+.awsq-steps li{flex:1 1 0;margin:0;padding:0;list-style:none}
+.awsq-steps li::before{content:none}
+.awsq-steps a{display:block;text-align:center;padding:4px 0;border-radius:5px;font:600 .75rem/1.4 var(--q-mono);text-decoration:none;background:var(--q-card2);border:1px solid var(--q-rule);color:var(--q-muted)}
+.awsq-steps a.done{background:var(--q-acc-t);color:var(--q-acc-ink);border-color:transparent}
+.awsq-steps a.cur{background:var(--q-cur);color:var(--q-on);border-color:transparent}
+.awsq-steps a:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-recs{display:flex;flex-wrap:wrap;gap:8px;margin:11px 0 0}
+.awsq-rec{flex:1 1 220px;display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:9px;border:1px solid var(--q-acc);background:var(--q-acc-t);
+  color:var(--q-acc-ink);font-weight:700;font-size:.92rem;line-height:1.3;text-decoration:none}
+a.awsq-rec:hover{text-decoration:none;filter:brightness(.97)}
+.awsq-rec i{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--q-acc);color:var(--q-on);font-style:normal;font-size:.7rem}
+.awsq-rec small{margin-left:auto;font:600 .68rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+.awsq-files{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+.awsq-files > b{margin-right:4px;font:600 .7rem/1.3 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-fb{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-rule);color:var(--q-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-fb:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-fb small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+span.awsq-fb{border-style:dashed;color:var(--q-muted);font-weight:600}
+.awsq a:focus-visible{outline:2px solid var(--q-focus);outline-offset:2px}
+.awsq a.aih{flex:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:var(--q-acc);color:var(--q-on);
+  font:700 .74rem/1.2 var(--q-mono);letter-spacing:.04em;text-decoration:none;white-space:nowrap}
+.awsq a.aih:hover{filter:brightness(1.08);text-decoration:none}
+.awsq-ver{display:flex;justify-content:flex-end;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+a.awsq-vl{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-acc);color:var(--q-acc-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-vl:hover{background:var(--q-acc-t);text-decoration:none}
+.awsq-vl small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-bottom{padding:0 !important;margin:48px 0 8px;max-width:none}
+.awsq-inmain{padding:0 !important;margin:0 0 28px;max-width:none}
+@media (max-width:1100px){.awsq{padding:0 24px}}
+@media (max-width:640px){.awsq-steps{flex-wrap:wrap}.awsq-steps li{flex:1 0 28px}.awsq{padding:0 16px}.awsq-t{white-space:normal;overflow-wrap:anywhere}.awsq-row{grid-template-columns:1fr 1fr}a.awsq-home{grid-column:1 / -1;grid-row:1;flex-direction:row;gap:8px}a.awsq-rec small{display:none}}
+@media print{.awsq{display:none}}
+</style>
+<div class="awsq awsq-top" role="navigation" aria-label="Capstone navigation (top)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 20 of 23 · Part 2 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../../"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement</span></a><a class="awsq-home" href="../../../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="../nova-brown-run/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../../../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../../../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../../../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../../../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../../../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../../../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../../../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../../../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../../../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../../../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../../../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../../../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../../../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../../../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../../../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../../../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../../../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../../../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../../../live-auction-house/" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="done" href="../../../live-auction-house/pages/live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="done" href="../../../live-auction-house/pages/live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="done" href="../../" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="cur" href="./" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough" aria-current="page">P20·2</a></li><li><a class="" href="../nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../../../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../../../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../../../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/balajiraghuram92/balajiraghuram92.github.io/tree/main/zips/Code/Capstone-Projects/nova-brown-blog-agent" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://balajiraghuram92.github.io/zips/Code/Zips/nova-brown-blog-agent-code.zip" download>⬇ Download all<small>.zip</small></a></div></div></div>
+<!-- /awsq:top -->
+
+<header class="masthead shell">
+  <p class="brand"><strong>Future with Shivank</strong>  /  AI engineering portfolio project  /  Solution walkthrough</p>
+  <h1>How the Nova + Brown blog writer works, and why it is built this way</h1>
+  <p class="dek">A complete walkthrough of the reference solution: the architecture, every design decision with the alternatives we rejected, the code that matters, what each command prints when you run it, and the questions an interviewer will ask.</p>
+
+  <figure class="diagram hero">
+    <div class="scroll">
+    <svg viewbox="0 0 1000 470" role="img" aria-labelledby="arch-t arch-d">
+      <title id="arch-t">System architecture</title>
+      <desc id="arch-d">Clients connect over MCP to the Nova research server on port 8001 and the Brown writing server on port 8002, optionally through a composed server on port 8003. Nova calls Gemini, Perplexity or Tavily, Firecrawl, GitHub and YouTube. Brown calls Gemini. Both read and write the same research folder on disk.</desc>
+      <defs>
+        <marker id="a" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5B6676"></path></marker>
+      </defs>
+      <g font-family="Avenir Next, Segoe UI, Helvetica Neue, system-ui, sans-serif">
+        <!-- clients -->
+        <text x="20" y="28" font-size="13" fill="#5B6676">Clients</text>
+        <g>
+          <rect x="20" y="40" width="290" height="62" rx="10" fill="#fff" stroke="#18212F" stroke-width="1.5"></rect>
+          <text x="38" y="66" font-size="15" font-weight="650" fill="#18212F">Nova terminal client</text>
+          <text x="38" y="87" font-size="12.5" fill="#5B6676">runs Nova in the same process</text>
+        </g>
+        <g>
+          <rect x="355" y="40" width="290" height="62" rx="10" fill="#fff" stroke="#18212F" stroke-width="1.5"></rect>
+          <text x="373" y="66" font-size="15" font-weight="650" fill="#18212F">Nova + Brown terminal client</text>
+          <text x="373" y="87" font-size="12.5" fill="#5B6676">talks to several MCP servers</text>
+        </g>
+        <g>
+          <rect x="690" y="40" width="290" height="62" rx="10" fill="#fff" stroke="#18212F" stroke-width="1.5"></rect>
+          <text x="708" y="66" font-size="15" font-weight="650" fill="#18212F">Claude Desktop, Cursor, ...</text>
+          <text x="708" y="87" font-size="12.5" fill="#5B6676">any MCP client, over stdio</text>
+        </g>
+
+        <!-- MCP arrows -->
+        <line x1="165" y1="104" x2="165" y2="168" stroke="#5B6676" stroke-width="1.6" marker-end="url(#a)"></line>
+        <line x1="500" y1="104" x2="500" y2="140" stroke="#5B6676" stroke-width="1.6" marker-end="url(#a)"></line>
+        <line x1="835" y1="104" x2="835" y2="168" stroke="#5B6676" stroke-width="1.6" marker-end="url(#a)"></line>
+        <text x="512" y="128" font-size="12" fill="#5B6676">MCP over stdio or HTTP</text>
+
+        <!-- composed server frame -->
+        <rect x="40" y="144" width="920" height="152" rx="16" fill="none" stroke="#2C55D6" stroke-width="1.6" stroke-dasharray="6 5"></rect>
+        <text x="500" y="164" text-anchor="middle" font-size="12.5" fill="#2C55D6" font-style="italic">optional: composed MCP server on :8003 mounts both and adds one end-to-end prompt</text>
+
+        <!-- Nova server -->
+        <rect x="70" y="174" width="400" height="104" rx="12" fill="#E3F2F1" stroke="#0B7A75" stroke-width="2"></rect>
+        <text x="92" y="204" font-size="18" font-weight="750" fill="#0B7A75">Nova MCP server</text>
+        <text x="300" y="204" font-size="13" fill="#0B7A75">:8001</text>
+        <text x="92" y="228" font-size="13" fill="#18212F">12 tools, 1 workflow prompt, 2 resources</text>
+        <text x="92" y="250" font-size="12.5" fill="#33404F">extract links, scrape, GitHub, YouTube,</text>
+        <text x="92" y="268" font-size="12.5" fill="#33404F">web search, select sources, build research.md</text>
+
+        <!-- Brown server -->
+        <rect x="530" y="174" width="400" height="104" rx="12" fill="#F3EAE3" stroke="#7A4A2B" stroke-width="2"></rect>
+        <text x="552" y="204" font-size="18" font-weight="750" fill="#7A4A2B">Brown MCP server</text>
+        <text x="764" y="204" font-size="13" fill="#7A4A2B">:8002</text>
+        <text x="552" y="228" font-size="13" fill="#18212F">3 tools, 3 prompts, 2 resources</text>
+        <text x="552" y="250" font-size="12.5" fill="#33404F">LangGraph workflows: generate article,</text>
+        <text x="552" y="268" font-size="12.5" fill="#33404F">edit article, edit selected text</text>
+
+        <!-- external services -->
+        <line x1="270" y1="280" x2="270" y2="330" stroke="#5B6676" stroke-width="1.6" marker-end="url(#a)"></line>
+        <line x1="730" y1="280" x2="730" y2="330" stroke="#5B6676" stroke-width="1.6" marker-end="url(#a)"></line>
+        <rect x="110" y="334" width="360" height="56" rx="10" fill="#fff" stroke="#C3CAD4" stroke-width="1.4"></rect>
+        <text x="128" y="358" font-size="13" font-weight="650" fill="#18212F">External services</text>
+        <text x="128" y="378" font-size="12.5" fill="#33404F">Gemini, Perplexity/Tavily, Firecrawl, gitingest, YouTube</text>
+        <rect x="530" y="334" width="360" height="56" rx="10" fill="#fff" stroke="#C3CAD4" stroke-width="1.4"></rect>
+        <text x="550" y="358" font-size="13" font-weight="650" fill="#18212F">External services</text>
+        <text x="550" y="378" font-size="12.5" fill="#33404F">Gemini (writer, reviewer, editor, diagrams)</text>
+
+        <!-- shared disk -->
+        <rect x="250" y="410" width="500" height="50" rx="10" fill="#18212F"></rect>
+        <text x="500" y="431" text-anchor="middle" font-size="13.5" font-weight="650" fill="#fff">One folder per article on disk</text>
+        <text x="500" y="450" text-anchor="middle" font-size="12" fill="#C9D4E3">article_guideline.md   .nova/   research.md   article_000.md ...   article.md</text>
+        <path d="M70,250 C12,250 12,440 248,440" fill="none" stroke="#0B7A75" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#a)"></path>
+        <path d="M930,250 C988,250 988,440 752,440" fill="none" stroke="#7A4A2B" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#a)"></path>
+      </g>
+    </svg>
+    </div>
+    <figcaption>The architecture. The two agents never call each other directly: they share files on disk, and any MCP client can drive either one.</figcaption>
+  </figure>
+
+  <dl class="facts">
+    <div><dt>Projects</dt><dd>5 uv projects: Nova server and client, Brown, composed server and client</dd></div>
+    <div><dt>MCP surface</dt><dd>15 tools, 5 prompts, 4 resources when composed</dd></div>
+    <div><dt>Default models</dt><dd>Gemini 3.5 Flash, with Gemini 2.5 Pro for query planning</dd></div>
+    <div><dt>Offline tests</dt><dd>225 Brown tests and 7 Nova tests, all passing</dd></div>
+  </dl>
+</header>
+
+<div class="shell layout">
+<nav class="toc" aria-label="Contents">
+  <p>Contents</p>
+  <ol>
+    <li><a href="#overview">The solution in one page</a></li>
+    <li><a href="#decisions">Design decisions</a></li>
+    <li><a href="#structure">Project structure</a></li>
+    <li><a href="#nova">Nova, the research agent</a>
+      <ol>
+        <li><a href="#nova-workflow">The workflow</a></li>
+        <li><a href="#nova-tools">The 12 tools</a></li>
+        <li><a href="#nova-disk">What Nova writes</a></li>
+      </ol>
+    </li>
+    <li><a href="#brown">Brown, the writing agent</a>
+      <ol>
+        <li><a href="#brown-context">Context as entities</a></li>
+        <li><a href="#brown-profiles">Writing profiles</a></li>
+        <li><a href="#brown-nodes">The four nodes</a></li>
+        <li><a href="#brown-loop">The generate workflow</a></li>
+        <li><a href="#brown-edit">Editing workflows</a></li>
+        <li><a href="#brown-config">Configuration</a></li>
+      </ol>
+    </li>
+    <li><a href="#integration">Running both together</a></li>
+    <li><a href="#quality">Tests, tracing and evals</a></li>
+    <li><a href="#run">How a run looks</a>
+      <ol>
+        <li><a href="#run-setup">Setup</a></li>
+        <li><a href="#run-brown">Brown on its own</a></li>
+        <li><a href="#run-diff">What the review loop changed</a></li>
+        <li><a href="#run-edit">Editing with feedback</a></li>
+        <li><a href="#run-nova">Nova on its own</a></li>
+        <li><a href="#run-e2e">End to end</a></li>
+        <li><a href="#run-tests">Tests</a></li>
+      </ol>
+    </li>
+    <li><a href="#interview">Interview follow-up questions</a></li>
+    <li><a href="#limits">Limits and next steps</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<!-- ============================================================ OVERVIEW -->
+<section id="overview">
+<h2><span class="n">1</span>The solution in one page</h2>
+<p>The system splits the job the way a newsroom does. <span class="nova-c">Nova</span> is the researcher: it reads the brief, collects sources from the web, GitHub and YouTube, throws away weak ones, and hands over one file, <code>research.md</code>. <span class="brown-c">Brown</span> is the writer and the editor: it writes a draft in the author's voice, then reviews its own work against the brief and a set of style rules, and edits until the reviewer has no more comments or the round limit is reached.</p>
+<p>Three ideas carry the whole design:</p>
+<ol>
+  <li><strong>Files are the contract.</strong> Every step reads and writes Markdown in one article folder. You can stop after research, read <code>research.md</code>, fix it by hand, and then run Brown. Each agent can be tested on its own.</li>
+  <li><strong>Each agent gets the right amount of autonomy.</strong> Nova's steps depend on what it finds (how many links, which sources are good), so an LLM drives the tools while following a written workflow. Brown's steps are always the same, so it is a fixed LangGraph workflow with LLM calls inside each step.</li>
+  <li><strong>Quality comes from a loop, not one big prompt.</strong> Brown writes, a separate reviewer call produces specific comments with structured output, and the writer edits against those comments. This is the evaluator-optimizer pattern.</li>
+</ol>
+<p>Everything is exposed through the Model Context Protocol (MCP), so the same agents work from the included terminal clients, from Claude Desktop or Cursor, or behind one composed server that runs research and writing in one go.</p>
+</section>
+
+<!-- ============================================================ DECISIONS -->
+<section id="decisions">
+<h2><span class="n">2</span>Design decisions, and the alternatives we rejected</h2>
+<p>In an interview, the code matters less than your reasons. Each decision below states what we chose, why, and what we gave up.</p>
+
+<div class="decision">
+<h3>Two specialised agents instead of one</h3>
+<p>Research and writing need different tools, different models and different failure handling. Research is I/O heavy (search APIs, scraping, transcription) and fails in messy ways. Writing is one long-context reasoning job that must follow strict style rules. Splitting them keeps each prompt short and focused, and lets you rerun one half without paying for the other.</p>
+<div class="why"><p class="lead">Rejected: a single agent with all 15 tools</p><p>One agent would carry the research tool descriptions and the style rules in the same context for the whole run. Tool selection gets worse as the tool list grows, and a failure in scraping would force you to redo the writing. It is also much harder to evaluate: you cannot tell whether a bad article came from bad research or bad writing.</p></div>
+</div>
+
+<div class="decision">
+<h3>Files on disk as the hand-off, not in-memory state</h3>
+<p>Nova writes <code>research.md</code>; Brown reads it. Every intermediate artefact (scraped pages, search results, selected source IDs, every draft) is a file in the article folder. A human can inspect and edit any of them, and the agents can be run on different machines or days.</p>
+<div class="why"><p class="lead">Rejected: passing a Python object or a shared database between agents</p><p>In-memory state disappears when a process crashes and cannot be reviewed by a person. A database adds infrastructure that the local version does not need. The deployable version of Nova does add Postgres later, for multi-user hosting, but the file layout stays the same.</p></div>
+</div>
+
+<div class="decision">
+<h3>MCP servers instead of a Python library or a REST API</h3>
+<p>MCP gives each agent a standard interface with three kinds of capability: <strong>tools</strong> (actions), <strong>prompts</strong> (ready-made workflow instructions) and <strong>resources</strong> (read-only data such as the app config). Any MCP client can use them: our terminal client, Claude Desktop, Cursor or another agent. FastMCP adds composition, so two servers can be mounted behind one endpoint with no extra code in either agent.</p>
+<div class="why"><p class="lead">Rejected: a plain Python package, or FastAPI endpoints</p><p>A package only works from Python code. A REST API works everywhere, but every client must be taught what each endpoint means; an MCP client discovers the tools, their parameter schemas and their descriptions on its own and can hand them straight to an LLM.</p></div>
+</div>
+
+<div class="decision">
+<h3>Nova: an LLM drives the tools, guided by a written workflow</h3>
+<p>Nova's tools are deterministic Python functions (with small LLM calls inside for cleaning pages, generating queries and selecting sources). The order is written in the <code>full_research_instructions_prompt</code>: extract links, process them, run 3 research rounds, filter, scrape the best, compile. The client's LLM reads that prompt and calls the tools in a ReAct loop. This lets it skip steps that do not apply (no YouTube links, no local files), react to failures, and take user changes such as "start from step 3" or "use Tavily".</p>
+<div class="why"><p class="lead">Rejected: a hard-coded research pipeline</p><p>A fixed pipeline is cheaper and fully predictable, and for a production batch job it is a fair choice. But research inputs vary a lot between articles, and the interactive "pause, look, steer" experience is much better with an agent. The critical failure policy in the prompt (stop when a tool processes zero items) puts a guard rail on that freedom.</p></div>
+</div>
+
+<div class="decision">
+<h3>Brown: a fixed LangGraph workflow, not an autonomous agent</h3>
+<p>Writing an article always has the same shape: load context, make diagrams, draft, then review and edit a few times. A workflow makes this predictable, cheap to reason about and easy to test. Brown uses LangGraph's functional API: one <code>@entrypoint</code> per workflow, and each LLM step is a <code>@task</code> with a retry policy of 3 attempts. A checkpointer stores task results, and a stream writer sends progress updates (0 to 100%) back to the MCP client.</p>
+<div class="why"><p class="lead">Rejected: letting an agent decide when the article is done</p><p>An autonomous writer may stop too early or loop forever, and its cost is hard to predict. A fixed number of rounds with an early stop gives a hard upper bound on cost and latency while still letting good drafts finish sooner.</p></div>
+</div>
+
+<div class="decision">
+<h3>Evaluator-optimizer loop with a capped reviewer</h3>
+<p>The reviewer is a separate LLM call at temperature 0 with a high thinking level. It must return structured output: a list of reviews, each with the <code>profile</code> it is based on, the <code>location</code> in the article and the <code>comment</code>. It may return at most 5 reviews per round. The writer then edits with those reviews in its context. If the reviewer returns none, the loop stops early.</p>
+<div class="why"><p class="lead">Rejected: asking the writer to "write and then check your own work" in one call</p><p>Self-checking inside one generation is weak: the model tends to approve what it just wrote. A separate call with a narrower job and structured output gives specific, actionable comments. The cap of 5 keeps the editor focused on the most important fixes instead of trying to address 30 small ones at once.</p></div>
+</div>
+
+<div class="decision">
+<h3>Style lives in Markdown profiles, not in one giant prompt</h3>
+<p>Six profiles describe how to write: <strong>character</strong> (the author persona, <code>shivank_agarwal.md</code>), <strong>article</strong>, <strong>structure</strong>, <strong>mechanics</strong>, <strong>terminology</strong> and <strong>tonality</strong>. The writer and the reviewer receive the same profiles, so the reviewer judges the draft by exactly the rules the writer was given. Non-engineers can change the voice by editing Markdown.</p>
+<div class="why"><p class="lead">Rejected: hard-coding style rules into the system prompt</p><p>Rules buried in Python strings are hard to review and easy to break. Separate files also let each review comment name the profile it relies on, which makes reviews easy to audit.</p></div>
+</div>
+
+<div class="decision">
+<h3>Cheap model by default, strong model where it pays off</h3>
+<p>The default config runs every Brown step on Gemini 3.5 Flash, but with a different thinking level per step: high for reviewing, medium for writing, low for editing and diagrams. Nova uses Gemini 2.5 Pro only for generating research queries, where planning quality decides the quality of everything after it. A second config, <code>gemini-pro.yaml</code>, runs the writer, reviewer and editor on Gemini 2.5 Pro so you can compare quality and cost with the evals.</p>
+<div class="why"><p class="lead">Rejected: one strong model everywhere</p><p>It roughly multiplies the cost of a run and does not help the simple steps such as cleaning a scraped page or drawing a Mermaid diagram.</p></div>
+</div>
+
+<div class="decision">
+<h3>A fake model for tests</h3>
+<p>Every model is created by one factory, <code>get_model()</code>. In tests, the config sets <code>model_id: "fake"</code> and the factory returns a <code>FakeModel</code> that replays canned responses, including structured outputs. The full workflows, the MCP server and the CLI run offline in about a second.</p>
+<div class="why"><p class="lead">Rejected: mocking HTTP calls, or only testing with the real API</p><p>HTTP mocks break whenever the provider SDK changes. Real API tests are slow, cost money and are not repeatable. Swapping the model at the factory keeps the rest of the code identical in tests and production.</p></div>
+</div>
+</section>
+
+<!-- ============================================================ STRUCTURE -->
+<section id="structure">
+<h2><span class="n">3</span>Project structure</h2>
+<p>Five independent <code>uv</code> projects, each with its own <code>pyproject.toml</code>, lock file and virtual environment. Nova uses Python 3.12 and Brown uses Python 3.14; <code>uv</code> downloads both automatically.</p>
+<pre><code>nova-brown-blog-agent/
+├── docs/                          <span class="c"># this walkthrough and the problem statement</span>
+├── nova-research-agent/
+│   ├── mcp_server/src/
+│   │   ├── server.py              <span class="c"># FastMCP server: registers tools, prompts, resources</span>
+│   │   ├── routers/               <span class="c"># tools.py, prompts.py, resources.py</span>
+│   │   ├── tools/                 <span class="c"># one file per tool (the logic behind each MCP tool)</span>
+│   │   ├── app/                   <span class="c"># handlers: scraping, GitHub, YouTube, Perplexity, Tavily, ...</span>
+│   │   ├── prompts/               <span class="c"># the full research workflow prompt</span>
+│   │   └── config/                <span class="c"># settings (models, keys) and file-name constants</span>
+│   ├── mcp_client/src/client.py   <span class="c"># terminal client with a Gemini ReAct loop</span>
+│   └── data/                      <span class="c"># sample guidelines (one with Nova's real research.md)</span>
+├── brown-writing-agent/
+│   ├── src/brown/
+│   │   ├── entities/              <span class="c"># Article, ArticleGuideline, Research, profiles, reviews</span>
+│   │   ├── loaders.py             <span class="c"># read Markdown inputs from disk</span>
+│   │   ├── nodes/                 <span class="c"># ArticleWriter, ArticleReviewer, MediaGenerator, Mermaid tool</span>
+│   │   ├── workflows/             <span class="c"># generate_article, edit_article, edit_selected_text</span>
+│   │   ├── mcp/server.py          <span class="c"># FastMCP server exposing the workflows</span>
+│   │   ├── models/                <span class="c"># model factory, supported models, FakeModel</span>
+│   │   └── evals/, observability/ <span class="c"># LLM-judge metrics, Opik tracing and datasets</span>
+│   ├── configs/                   <span class="c"># gemini-flash.yaml (default), gemini-pro.yaml, debug.yaml</span>
+│   ├── inputs/profiles/           <span class="c"># 5 style profiles + character_profiles/shivank_agarwal.md</span>
+│   ├── inputs/examples/           <span class="c"># example articles used as style references</span>
+│   ├── inputs/tests/              <span class="c"># sample article folders to run Brown on</span>
+│   ├── inputs/evals/dataset/      <span class="c"># 6 samples for the evaluation dataset</span>
+│   └── scripts/brown_mcp_cli.py   <span class="c"># CLI: generate-article, edit-article, edit-selected-text</span>
+└── nova-brown-integration/
+    ├── mcp_server/src/main.py     <span class="c"># composed server: mounts Nova + Brown, adds one prompt</span>
+    └── mcp_client/                <span class="c"># multi-server terminal client + JSON configs</span></code></pre>
+</section>
+
+<!-- ============================================================ NOVA -->
+<section id="nova">
+<h2><span class="n">4</span>Nova, the research agent</h2>
+<p>Nova has two halves. The <strong>MCP server</strong> owns the tools: each one reads from and writes to the article folder and returns a small JSON summary. The <strong>client</strong> owns the brain: a Gemini model (3.5 Flash, low thinking) that receives the tool list from the server and decides which tool to call next.</p>
+
+<h3 id="nova-workflow">The workflow</h3>
+<p>The workflow is written in plain English inside the <code>full_research_instructions_prompt</code>. When you load it in the client, the LLM follows these steps:</p>
+<ol class="steps">
+  <li><strong class="t">Set up.</strong> Explain the steps, ask for the research folder, then call <code>extract_guidelines_urls</code>. It sorts every reference in <code>article_guideline.md</code> into GitHub links, YouTube links, other web links and local files.</li>
+  <li><strong class="t">Process what the guideline points to.</strong> Copy local files, scrape and clean web pages with Firecrawl, summarise GitHub repos with gitingest, transcribe YouTube videos with Gemini. The prompt allows these four in the same turn.</li>
+  <li><strong class="t">Research loop, 3 rounds.</strong> <code>generate_next_queries</code> compares the guideline with everything collected so far and proposes 5 new questions with a reason for each. <code>run_web_research</code> runs them on Perplexity (or Tavily) and appends the answers and sources.</li>
+  <li><strong class="t">Keep only good sources.</strong> <code>select_research_sources_to_keep</code> scores each source for trust, authority and relevance, and writes a filtered results file.</li>
+  <li><strong class="t">Read the best sources in full.</strong> <code>select_research_sources_to_scrape</code> picks up to 5 diverse sources worth reading completely, and <code>scrape_research_urls</code> scrapes and cleans them.</li>
+  <li><strong class="t">Write research.md.</strong> <code>create_research_file</code> combines everything into one Markdown file with collapsible sections.</li>
+</ol>
+<p>The prompt also sets a <strong>critical failure policy</strong>: if any tool processes zero items successfully (for example "scraped 0/7 URLs"), the agent must stop, quote the error, and ask the user how to continue.</p>
+
+<p class="filelabel">nova-research-agent/mcp_server/src/prompts/research_instructions_prompt.py (excerpt)</p>
+<pre><code>3. Repeat the following research loop for 3 rounds:
+
+    3.1. Run the "generate_next_queries" tool to analyze the ARTICLE_GUIDELINE_FILE, the already-scraped
+    guideline URLs, and the existing PERPLEXITY_RESULTS_FILE. ... The tool identifies knowledge gaps,
+    proposes new web-search questions, and writes them - together with a short justification for each -
+    to the NEXT_QUERIES_FILE within NOVA_FOLDER.
+
+    3.2. Run the "run_web_research" tool with the new queries. It uses Perplexity by default and appends
+    results to PERPLEXITY_RESULTS_FILE within NOVA_FOLDER. If the user explicitly requests Tavily, pass
+    provider="tavily" instead.</code></pre>
+
+<p>Each tool is a thin wrapper registered on the FastMCP server. The docstring becomes the tool description the LLM reads, and <code>@opik.track</code> traces the call:</p>
+<p class="filelabel">nova-research-agent/mcp_server/src/routers/tools.py (excerpt)</p>
+<pre><code><span class="f">@mcp.tool</span>()
+<span class="f">@opik.track</span>(type=<span class="s">"tool"</span>)
+<span class="k">async def</span> extract_guidelines_urls(research_directory: str) -&gt; Dict[str, Any]:
+    <span class="s">"""
+    Extract URLs and local file references from article guidelines.
+    ...
+    """</span>
+    opik_context.update_thread_id()
+
+    result = extract_guidelines_urls_tool(research_directory)
+    <span class="k">return</span> result</code></pre>
+
+<h3 id="nova-tools">The 12 tools</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Tool</th><th>What it does</th><th>LLM inside</th></tr></thead>
+  <tbody>
+    <tr><td><code>extract_guidelines_urls</code></td><td>Finds GitHub, YouTube, web and local-file references in the guideline</td><td>None</td></tr>
+    <tr><td><code>process_local_files</code></td><td>Copies referenced <code>.py</code>, <code>.ipynb</code> and <code>.md</code> files; notebooks are converted to Markdown</td><td>None</td></tr>
+    <tr><td><code>scrape_and_clean_other_urls</code></td><td>Scrapes guideline web links with Firecrawl (4 at a time) and cleans them</td><td>Gemini 3.5 Flash</td></tr>
+    <tr><td><code>process_github_urls</code></td><td>Summarises repos and files with gitingest</td><td>None</td></tr>
+    <tr><td><code>transcribe_youtube_urls</code></td><td>Transcribes videos (2 at a time, with retries)</td><td>Gemini 3.5 Flash</td></tr>
+    <tr><td><code>generate_next_queries</code></td><td>Finds knowledge gaps and proposes new search questions</td><td>Gemini 2.5 Pro</td></tr>
+    <tr><td><code>run_web_research</code></td><td>Runs the queries on Perplexity (default) or Tavily</td><td>Search API</td></tr>
+    <tr><td><code>run_perplexity_research</code></td><td>Older Perplexity-only version, kept for compatibility</td><td>Search API</td></tr>
+    <tr><td><code>select_research_sources_to_keep</code></td><td>Scores sources for trust, authority and relevance</td><td>Gemini 3.5 Flash</td></tr>
+    <tr><td><code>select_research_sources_to_scrape</code></td><td>Chooses up to 5 sources to read in full</td><td>Gemini 3.5 Flash</td></tr>
+    <tr><td><code>scrape_research_urls</code></td><td>Scrapes and cleans the chosen sources</td><td>Gemini 3.5 Flash</td></tr>
+    <tr><td><code>create_research_file</code></td><td>Builds the final <code>research.md</code></td><td>None</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The server also exposes two resources, <code>system://status</code> and <code>system://memory</code>, for health checks.</p>
+
+<h3 id="nova-disk">What Nova writes to disk</h3>
+<p>All intermediate files go into a hidden <code>.nova</code> folder, so the article folder stays clean and every step can be inspected or rerun:</p>
+<pre><code>research_function_calling/
+├── article_guideline.md                  <span class="c"># input, written by a human</span>
+├── .nova/
+│   ├── guidelines_filenames.json         <span class="c"># step 1: links found in the guideline</span>
+│   ├── local_files_from_research/        <span class="c"># step 2: copied local files</span>
+│   ├── urls_from_guidelines/             <span class="c"># step 2: cleaned web pages</span>
+│   ├── urls_from_guidelines_code/        <span class="c"># step 2: GitHub summaries</span>
+│   ├── urls_from_guidelines_youtube_videos/  <span class="c"># step 2: transcripts</span>
+│   ├── next_queries.md                   <span class="c"># step 3: queries + reasons (latest round)</span>
+│   ├── perplexity_results.md             <span class="c"># step 3: all search results (name kept for both providers)</span>
+│   ├── perplexity_sources_selected.md    <span class="c"># step 4: IDs of kept sources</span>
+│   ├── perplexity_results_selected.md    <span class="c"># step 4: only the kept results</span>
+│   ├── urls_to_scrape_from_research.md   <span class="c"># step 5: chosen URLs</span>
+│   └── urls_from_research/               <span class="c"># step 5: full text of chosen sources</span>
+└── research.md                           <span class="c"># step 6: the output for Brown</span></code></pre>
+
+<p>Here is the top of a real <code>research.md</code> that Nova produced for the function-calling guideline (it ships in <code>nova-research-agent/data/research_function_calling/</code>). The file has five sections: Research Results, Sources Scraped From Research Results, Code Sources, YouTube Video Transcripts and Additional Sources Scraped.</p>
+<pre><code># Research
+
+## Research Results
+
+&lt;details&gt;
+&lt;summary&gt;Role of tool use and function calling in autonomous AI agent architectures&lt;/summary&gt;
+
+### Source [1]: https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-patterns/tool-based-agents-for-calling-functions.html
+
+Query: Role of tool use and function calling in autonomous AI agent architectures
+
+Answer: This AWS Prescriptive Guidance describes **tool-based agents for calling functions** as a core
+architectural pattern in agentic AI. ...</code></pre>
+<div class="why"><p class="lead">Why every source keeps its URL and query</p><p>Brown is told to anchor claims in the research and to cite sources. Keeping the URL next to every block is what makes the final reference list possible, and lets a human check any claim in seconds.</p></div>
+</section>
+
+<!-- ============================================================ BROWN -->
+<section id="brown">
+<h2><span class="n">5</span>Brown, the writing agent</h2>
+<p>Brown is a Python package (<code>src/brown</code>) with three LangGraph workflows behind a FastMCP server. It is built in layers: <strong>entities</strong> hold data, <strong>loaders</strong> read them from disk, <strong>nodes</strong> make LLM calls, and <strong>workflows</strong> put nodes in order.</p>
+
+<h3 id="brown-context">Context as entities</h3>
+<p>Every input is a small Pydantic model with a <code>to_context()</code> method that wraps it in XML tags named after the class. Prompts are then built from these blocks, so the model always sees the same, clearly delimited structure:</p>
+<p class="filelabel">brown-writing-agent/src/brown/entities/research.py (excerpt)</p>
+<pre><code><span class="k">class</span> Research(BaseModel, ContextMixin):
+    <span class="s">"""Research content plus the image URLs found in it."""</span>
+
+    content: str
+    max_image_urls: int = 30
+
+    <span class="k">def</span> to_context(self) -&gt; str:
+        <span class="s">"""Wrap the research in XML tags for an LLM prompt."""</span>
+        <span class="k">return</span> f<span class="s">"""
+&lt;{self.xml_tag}&gt;
+    {self.content}
+&lt;/{self.xml_tag}&gt;
+"""</span></code></pre>
+<p>The research entity also finds image URLs in the research, checks that each one is reachable and really an image, and sends up to 30 of them to the writer as extra multimodal context.</p>
+
+<h3 id="brown-profiles">Writing profiles</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Profile</th><th>File</th><th>What it controls</th></tr></thead>
+  <tbody>
+    <tr><td>Character</td><td><code>character_profiles/shivank_agarwal.md</code></td><td>Who is writing: background, niche, content pillars and voice</td></tr>
+    <tr><td>Article</td><td><code>article_profile.md</code></td><td>Introduction, section and conclusion rules, transitions, length limits and the article template</td></tr>
+    <tr><td>Structure</td><td><code>structure_profile.md</code></td><td>Sentence and paragraph length, headings, lists, media captions and code formatting</td></tr>
+    <tr><td>Mechanics</td><td><code>mechanics_profile.md</code></td><td>English variant, active voice, point of view, punctuation, emoji and acronyms</td></tr>
+    <tr><td>Terminology</td><td><code>terminology_profile.md</code></td><td>Word choice, emphasis, and lists of banned filler words and phrases</td></tr>
+    <tr><td>Tonality</td><td><code>tonality_profile.md</code></td><td>Which tones are on-brand and which are off-brand</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The writer prompt tells the model to <em>impersonate</em> the character without announcing it: it should never open sections with "I'm Shivank Agarwal, Head of AI at Scaler". Two example articles in <code>inputs/examples/lessons/</code> show the target format.</p>
+
+<h3 id="brown-nodes">The four nodes</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Node</th><th>Job</th><th>Output</th></tr></thead>
+  <tbody>
+    <tr><td><code>MediaGeneratorOrchestrator</code></td><td>Reads the guideline and research, and calls a tool for every diagram the guideline asks for</td><td>A list of tool calls</td></tr>
+    <tr><td><code>MermaidDiagramGenerator</code></td><td>A tool node: turns a description into Mermaid code and a caption</td><td>Structured <code>GeneratedMermaidDiagram</code></td></tr>
+    <tr><td><code>ArticleWriter</code></td><td>Writes the article; with reviews passed in, it edits the previous version instead</td><td>Markdown article or edited selection</td></tr>
+    <tr><td><code>ArticleReviewer</code></td><td>Compares the article (or a selection) with the guideline, profiles and optional human feedback</td><td>Structured list of reviews, at most 5</td></tr>
+  </tbody>
+</table>
+</div>
+<p>A review is a small structured object. Here is the shape the reviewer must return (this example is the canned response the tests use):</p>
+<pre><code>{
+  "reviews": [
+    { "profile": "tonality",
+      "location": "Introduction - First paragraph",
+      "comment": "The tone is overly formal. The tonality profile specifies a conversational tone." },
+    { "profile": "mechanics",
+      "location": "Section 2 - Third paragraph",
+      "comment": "The paragraph exceeds the recommended length specified in the mechanics profile." }
+  ]
+}</code></pre>
+
+<h3 id="brown-loop">The generate workflow</h3>
+<figure class="diagram loop">
+  <div class="scroll">
+  <svg viewbox="0 0 900 250" role="img" aria-labelledby="loop-t loop-d">
+    <title id="loop-t">Brown's generate-article workflow</title>
+    <desc id="loop-d">Load context, generate media items in parallel, write the first draft saved as article_000.md, then repeat review and edit, saving article_001, article_002 and so on, stopping early if the reviewer returns no reviews. The last version is saved as article.md.</desc>
+    <defs>
+      <marker id="b" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#18212F"></path></marker>
+      <marker id="bp" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2C55D6"></path></marker>
+    </defs>
+    <g font-family="Avenir Next, Segoe UI, Helvetica Neue, system-ui, sans-serif" fill="#18212F">
+      <rect x="10" y="60" width="130" height="64" rx="10" fill="#fff" stroke="#18212F" stroke-width="1.5"></rect>
+      <text x="75" y="88" text-anchor="middle" font-size="14" font-weight="650">Load context</text>
+      <text x="75" y="107" text-anchor="middle" font-size="11.5" fill="#5B6676">guideline, research,</text>
+      <text x="75" y="120" text-anchor="middle" font-size="11.5" fill="#5B6676">profiles, examples</text>
+      <line x1="142" y1="92" x2="172" y2="92" stroke="#18212F" stroke-width="1.6" marker-end="url(#b)"></line>
+
+      <rect x="176" y="60" width="150" height="64" rx="10" fill="#fff" stroke="#18212F" stroke-width="1.5"></rect>
+      <text x="251" y="88" text-anchor="middle" font-size="14" font-weight="650">Media items</text>
+      <text x="251" y="107" text-anchor="middle" font-size="11.5" fill="#5B6676">Mermaid diagrams,</text>
+      <text x="251" y="120" text-anchor="middle" font-size="11.5" fill="#5B6676">generated in parallel</text>
+      <line x1="328" y1="92" x2="358" y2="92" stroke="#18212F" stroke-width="1.6" marker-end="url(#b)"></line>
+
+      <rect x="362" y="60" width="140" height="64" rx="10" fill="#F3EAE3" stroke="#7A4A2B" stroke-width="1.8"></rect>
+      <text x="432" y="88" text-anchor="middle" font-size="14" font-weight="650" fill="#7A4A2B">Write draft</text>
+      <text x="432" y="110" text-anchor="middle" font-size="11.5" fill="#5B6676">article_000.md</text>
+      <line x1="504" y1="92" x2="540" y2="92" stroke="#18212F" stroke-width="1.6" marker-end="url(#b)"></line>
+
+      <rect x="544" y="60" width="120" height="64" rx="10" fill="#E8EDFC" stroke="#2C55D6" stroke-width="1.8"></rect>
+      <text x="604" y="88" text-anchor="middle" font-size="14" font-weight="650" fill="#2C55D6">Review</text>
+      <text x="604" y="107" text-anchor="middle" font-size="11.5" fill="#5B6676">max 5 comments,</text>
+      <text x="604" y="120" text-anchor="middle" font-size="11.5" fill="#5B6676">structured output</text>
+      <line x1="666" y1="92" x2="702" y2="92" stroke="#18212F" stroke-width="1.6" marker-end="url(#b)"></line>
+
+      <rect x="706" y="60" width="120" height="64" rx="10" fill="#F3EAE3" stroke="#7A4A2B" stroke-width="1.8"></rect>
+      <text x="766" y="88" text-anchor="middle" font-size="14" font-weight="650" fill="#7A4A2B">Edit</text>
+      <text x="766" y="110" text-anchor="middle" font-size="11.5" fill="#5B6676">article_00N.md</text>
+
+      <path d="M766,126 C766,190 604,190 604,128" fill="none" stroke="#2C55D6" stroke-width="2.2" stroke-dasharray="7 5" marker-end="url(#bp)"></path>
+      <text x="685" y="206" text-anchor="middle" font-size="12.5" fill="#2C55D6" font-style="italic">repeat up to num_reviews times (3)</text>
+
+      <path d="M604,58 C604,18 860,18 860,58" fill="none" stroke="#18212F" stroke-width="1.4" marker-end="url(#b)"></path>
+      <text x="730" y="16" text-anchor="middle" font-size="11.5" fill="#5B6676">no reviews: stop early</text>
+      <rect x="836" y="60" width="60" height="64" rx="10" fill="#18212F"></rect>
+      <text x="866" y="96" text-anchor="middle" font-size="12" font-weight="650" fill="#fff">article</text>
+      <text x="866" y="111" text-anchor="middle" font-size="12" font-weight="650" fill="#fff">.md</text>
+      <line x1="828" y1="92" x2="834" y2="92" stroke="#18212F" stroke-width="1.6"></line>
+      <text x="450" y="240" text-anchor="middle" font-size="12" fill="#5B6676">Every box is a LangGraph @task with RetryPolicy(max_attempts=3); progress is streamed to the MCP client</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>Brown's generate workflow. The dashed blue loop is the evaluator-optimizer pattern.</figcaption>
+</figure>
+
+<p>The heart of the workflow is this loop. Note the early stop when the reviewer has nothing to say, and that every version is saved:</p>
+<p class="filelabel">brown-writing-agent/src/brown/workflows/generate_article.py (excerpt)</p>
+<pre><code><span class="k">for</span> i <span class="k">in</span> range(1, app_config.num_reviews + 1):
+    ...
+    reviews = <span class="k">await</span> generate_reviews(article, context[<span class="s">"article_guideline"</span>], context[<span class="s">"profiles"</span>])
+
+    <span class="c"># Early stop: no reviews means the article already satisfies all requirements, so there is</span>
+    <span class="c"># nothing to edit and further review/edit iterations are unnecessary.</span>
+    <span class="k">if not</span> reviews.reviews:
+        ...
+        <span class="k">break</span>
+
+    article = <span class="k">await</span> edit_based_on_reviews(
+        context[<span class="s">"article_guideline"</span>], context[<span class="s">"research"</span>], context[<span class="s">"profiles"</span>],
+        media_items, context[<span class="s">"examples"</span>], reviews,
+    )
+    article_path = dir_path / app_config.context.build_article_uri(i)   <span class="c"># article_001.md, article_002.md, ...</span>
+    article_renderer.render(article, output_uri=article_path)</code></pre>
+
+<p>Each step is a LangGraph task with retries (simplified slightly):</p>
+<pre><code>retry_policy = RetryPolicy(max_attempts=3, retry_on=Exception)
+
+<span class="f">@task</span>(retry_policy=retry_policy)
+<span class="k">async def</span> generate_reviews(article: Article, article_guideline: ArticleGuideline, article_profiles: ArticleProfiles) -&gt; ArticleReviews:
+    <span class="s">"""Review the current article against the guideline and profiles."""</span>
+    model, _ = build_model(app_config, node=<span class="s">"review_article"</span>)
+    article_reviewer = ArticleReviewer(
+        to_review=article, article_guideline=article_guideline, article_profiles=article_profiles,
+        model=model, max_reviews=app_config.max_reviews_per_iteration,
+    )
+    <span class="k">return await</span> article_reviewer.ainvoke()</code></pre>
+
+<h3 id="brown-edit">Editing workflows</h3>
+<p>Two more workflows reuse the same reviewer and writer, but run one review and one edit, guided by human feedback:</p>
+<ul>
+  <li><strong>Edit article</strong> reviews the whole <code>article.md</code> against the feedback and rewrites it.</li>
+  <li><strong>Edit selected text</strong> takes a line range. The reviewer sees the full article for context but comments only on the selection, and the writer returns only the edited lines, which the CLI puts back in place.</li>
+</ul>
+<p>Neither regenerates diagrams: the media items are marked as "available only in the source file", so the writer keeps the existing ones.</p>
+
+<h3 id="brown-config">Configuration</h3>
+<p>The YAML file named by <code>CONFIG_FILE</code> sets the inputs, the loop size and the model for every node:</p>
+<p class="filelabel">brown-writing-agent/configs/gemini-flash.yaml (excerpt)</p>
+<pre><code>context:
+  profiles_uri: <span class="s">"inputs/profiles"</span>
+  character_profile: <span class="s">"shivank_agarwal.md"</span>
+  examples_uri: <span class="s">"inputs/examples/lessons"</span>
+memory:
+  checkpointer: <span class="s">"in_memory"</span>     <span class="c"># or "sqlite" to keep checkpoints on disk</span>
+num_reviews: 3                  <span class="c"># review + edit rounds</span>
+max_reviews_per_iteration: 5    <span class="c"># reviewer cap per round</span>
+nodes:
+  write_article:
+    model_id: <span class="s">"google_genai:gemini-3.5-flash"</span>
+    model_config: { thinking_level: medium }
+  review_article:
+    model_id: <span class="s">"google_genai:gemini-3.5-flash"</span>
+    model_config: { temperature: 0.0, thinking_level: high }
+  edit_article:
+    model_id: <span class="s">"google_genai:gemini-3.5-flash"</span>
+    model_config: { thinking_level: low }</code></pre>
+<p>Brown's MCP server exposes the three workflows as tools (<code>generate_article</code>, <code>edit_article</code>, <code>edit_selected_text</code>), one prompt per tool that tells an agent how to call it, and two resources: <code>resource://config/app</code> and <code>resource://profiles/character</code>.</p>
+</section>
+
+<!-- ============================================================ INTEGRATION -->
+<section id="integration">
+<h2><span class="n">6</span>Running both together</h2>
+<p>There are two ways to put Nova and Brown in front of one client.</p>
+<h3>Option A: one client, two servers</h3>
+<p>The integration client reads a JSON file listing several MCP servers and connects to all of them. Tool and prompt names get the server name as a prefix, so nothing clashes.</p>
+<p class="filelabel">nova-brown-integration/mcp_client/mcp_servers_config.json</p>
+<pre><code>{
+  "mcpServers": {
+    "nova-research-agent":   { "url": "http://localhost:8001/mcp" },
+    "brown-writing-workflow": { "url": "http://localhost:8002/mcp" }
+  }
+}</code></pre>
+<h3>Option B: one composed server</h3>
+<p>FastMCP can turn any MCP client into a proxy server and mount it inside another server. The composed server mounts Nova and Brown without prefixes and registers one extra prompt, <code>full_research_and_writing_workflow</code>, which contains Nova's research steps followed by Brown's article generation on the same folder.</p>
+<p class="filelabel">nova-brown-integration/mcp_server/src/main.py (simplified excerpt, logging removed)</p>
+<pre><code>mcp = FastMCP(name=<span class="s">"Nova+Brown Composed Server"</span>, version=<span class="s">"0.1.0"</span>)
+
+<span class="k">for</span> server_name, server_config <span class="k">in</span> servers_config.items():
+    client = Client({<span class="s">"mcpServers"</span>: {server_name: server_config}})
+    proxy = FastMCP.as_proxy(client)     <span class="c"># a server that forwards every call to Nova or Brown</span>
+    mcp.mount(proxy)                     <span class="c"># no prefix: tool names stay as they are</span>
+
+register_combined_prompt(mcp)            <span class="c"># adds full_research_and_writing_workflow</span></code></pre>
+<div class="why"><p class="lead">Why compose instead of merging the code</p><p>Nova and Brown keep separate dependencies, Python versions and release cycles. Composition happens at the protocol level, so either agent can be upgraded or redeployed without touching the other.</p></div>
+</section>
+
+<!-- ============================================================ QUALITY -->
+<section id="quality">
+<h2><span class="n">7</span>Tests, tracing and evaluation</h2>
+<h3>Offline tests</h3>
+<p>Brown has 225 tests: entities, loaders, renderers, model config, each node, each workflow end to end, the eval dataset and the metrics. They run with <code>configs/debug.yaml</code>, where every <code>model_id</code> is <code>"fake"</code>, so no API key is needed. Nova has 7 tests for web search parsing, provider selection and page cleaning.</p>
+<h3>Tracing with Opik</h3>
+<p>Set <code>OPIK_ENABLED=true</code> and an <code>OPIK_API_KEY</code>, and every Brown run is traced: the MCP tool attaches an <code>OpikTracer</code> callback with a thread ID and tags such as <code>generate</code>, plus the full app config as metadata. Nova traces each tool call with <code>@opik.track</code>, and the clients trace their Gemini calls. In Opik you can open one article run and see every LLM call, its prompt, output, tokens and latency.</p>
+<h3>LLM-as-judge evaluation</h3>
+<p>The evaluation dataset in <code>inputs/evals/dataset/</code> has 6 samples, each with a guideline, research and a human-written ground-truth article. Two are used only as few-shot examples for the judges. The rest are split into <code>val</code> (one sample, for quick checks) and <code>test</code> (three samples). Two metrics, both judged by Gemini 2.5 Pro section by section:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Metric</th><th>Compares the generated article with</th><th>Scores</th></tr></thead>
+  <tbody>
+    <tr><td><code>follows_gt</code></td><td>The ground-truth article</td><td>Content, flow and structure for every section</td></tr>
+    <tr><td><code>user_intent</code></td><td>The guideline and the research</td><td>Guideline adherence and research anchoring for every section (pass or fail)</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Run the same dataset with <code>gemini-flash.yaml</code> and <code>gemini-pro.yaml</code> and compare the scores in Opik. That is how you decide whether the stronger, more expensive writer is worth it.</p>
+<div class="why"><p class="lead">Why two metrics</p><p><code>user_intent</code> answers "did it do what the brief asked, using the research?" without needing a reference article, so it also works on new topics. <code>follows_gt</code> answers "is it as good as what an expert wrote?", but only where you have an expert article. Together they separate "followed the instructions" from "wrote well".</p></div>
+</section>
+
+<!-- ============================================================ RUN -->
+<section id="run">
+<h2><span class="n">8</span>How a run looks</h2>
+<p>Every terminal block below is marked in its title bar. <strong>Captured</strong> means it was copied from an actual run of this code. <strong>Illustrative</strong> means the format comes straight from the code, but the content (counts, wording, times) depends on your topic and the model, so yours will differ.</p>
+
+<h3 id="run-setup">Setup</h3>
+<ol class="steps plain">
+  <li><strong class="t">Install each project.</strong> From the project root, run <code>uv sync</code> in each of the five folders. The README has a one-line loop for this.</li>
+  <li><strong class="t">Add your keys.</strong> Copy <code>.env.example</code> to <code>.env</code> in each folder you use, and fill in <code>GOOGLE_API_KEY</code> (plus <code>PPLX_API_KEY</code> and <code>FIRECRAWL_API_KEY</code> for Nova).</li>
+</ol>
+<figure class="term">
+  <div class="bar"><span>Terminal: install Brown</span><span class="kind real">Captured</span></div>
+<pre><span class="t-p">$</span> <span class="t-cmd">cd brown-writing-agent &amp;&amp; uv sync</span>
+Using CPython 3.14.4
+Creating virtual environment at: .venv
+Resolved 153 packages in 2ms
+Installed 150 packages in 654ms
+<span class="t-p">$</span> <span class="t-cmd">cp .env.example .env</span>     <span class="t-dim"># then add GOOGLE_API_KEY</span></pre>
+  <figcaption>On a first install you will also see download progress; this run had the packages in uv's cache already.</figcaption>
+</figure>
+
+<h3 id="run-brown">Brown on its own</h3>
+<p>Brown needs a folder with <code>article_guideline.md</code> and <code>research.md</code>. The smallest sample is <code>inputs/tests/00_sample_tiny</code>, whose guideline asks for one Mermaid diagram.</p>
+<p>First, the offline run. With <code>CONFIG_FILE=configs/debug.yaml</code> every model is the fake model, so this works without any key and shows exactly the steps and files a real run goes through:</p>
+<figure class="term">
+  <div class="bar"><span>Terminal: generate an article with fake models</span><span class="kind real">Captured</span></div>
+<pre><span class="t-p">$</span> <span class="t-cmd">CONFIG_FILE=configs/debug.yaml uv run python scripts/brown_mcp_cli.py generate-article --dir-path inputs/tests/00_sample_tiny</span>
+<span class="t-dim">2026-11-15 05:29:57.851</span> | <span class="t-info">INFO</span>     | brown.mcp.server:&lt;module&gt;:35 - Initializing Brown MCP Server...
+<span class="t-dim">2026-11-15 05:29:57.854</span> | <span class="t-info">INFO</span>     | brown.mcp.server:&lt;module&gt;:37 - Brown MCP Server initialized successfully
+<span class="t-dim">2026-11-15 05:29:57.861</span> | <span class="t-info">INFO</span>     | __main__:generate_article:58 - Starting article generation for directory: inputs/tests/00_sample_tiny
+<span class="t-dim">[11/15/26 05:29:57]</span> <span class="t-info">INFO</span>     Server log: 0%: Loading context
+                    <span class="t-info">INFO</span>     Server log: 2%: Loaded context
+                    <span class="t-info">INFO</span>     Server log: 3%: Generating media items
+<span class="t-dim">2026-11-15 05:29:57.918</span> | <span class="t-warn">WARNING</span>  | brown.nodes.media_generator:ainvoke:157 - No tool calls found in the response. Instead found response of type `&lt;class 'list'&gt;`.
+                    <span class="t-info">INFO</span>     Server log: Found 0 media items to generate using the following tool configurations:
+                    <span class="t-info">INFO</span>     Server log: Executing 0 media item generation jobs in parallel.
+                    <span class="t-info">INFO</span>     Server log: Generated 0 media items.
+                    <span class="t-info">INFO</span>     Server log: 10%: Generated media items
+                    <span class="t-info">INFO</span>     Server log: 15%: Writing article
+                    <span class="t-info">INFO</span>     Server log: 20%: Written raw article
+                    <span class="t-info">INFO</span>     Server log: 25%: Rendered raw article to `inputs/tests/00_sample_tiny/article_000.md`
+                    <span class="t-info">INFO</span>     Server log: 50%: Reviewing article [Iteration 1 / 1]
+                    <span class="t-info">INFO</span>     Server log: 50%: Generated reviews
+                    <span class="t-info">INFO</span>     Server log: 75%: Editing article
+                    <span class="t-info">INFO</span>     Server log: 75%: Edited article
+                    <span class="t-info">INFO</span>     Server log: 99%: Rendered article to `inputs/tests/00_sample_tiny/article_001.md`
+                    <span class="t-info">INFO</span>     Server log: 100%: Final article rendered to `inputs/tests/00_sample_tiny/article.md`
+                    <span class="t-info">INFO</span>     Server log: Final article rendered to `inputs/tests/00_sample_tiny/article.md`.
+<span class="t-dim">2026-11-15 05:29:57.956</span> | <span class="t-ok">SUCCESS</span>  | __main__:generate_article:63 - Article generation completed successfully
+<span class="t-dim">2026-11-15 05:29:57.956</span> | <span class="t-info">INFO</span>     | __main__:generate_article:64 - Generated article content:
+Article generation completed successfully!</pre>
+  <figcaption>The debug config runs 1 review round and the fake model requests no diagrams, which is why you see the warning and 0 media items.</figcaption>
+</figure>
+
+<p>With your <code>GOOGLE_API_KEY</code> and the default <code>gemini-flash.yaml</code> (3 review rounds), the same command shows the diagram tool call and three rounds of review and edit. The percentages below are the ones the workflow computes for 3 rounds:</p>
+<figure class="term">
+  <div class="bar"><span>Terminal: generate an article with Gemini 3.5 Flash</span><span class="kind ill">Illustrative</span></div>
+<pre><span class="t-p">$</span> <span class="t-cmd">make brown-generate-article DIR_PATH=inputs/tests/00_sample_tiny</span>
+... | <span class="t-info">INFO</span>     | __main__:generate_article:58 - Starting article generation for directory: inputs/tests/00_sample_tiny
+<span class="t-info">INFO</span>  Server log: 0%: Loading context
+<span class="t-info">INFO</span>  Server log: 2%: Loaded context
+<span class="t-info">INFO</span>  Server log: 3%: Generating media items
+<span class="t-info">INFO</span>  Server log: Found 1 media items to generate using the following tool configurations:
+<span class="t-info">INFO</span>  Server log:   • Tool 1: mermaid_diagram_generator_tool - A spectrum from workflows to autonomous agents ...
+<span class="t-info">INFO</span>  Server log: Executing 1 media item generation jobs in parallel.
+<span class="t-info">INFO</span>  Server log: Generated 1 media items.
+<span class="t-info">INFO</span>  Server log: 10%: Generated media items
+<span class="t-info">INFO</span>  Server log: 15%: Writing article
+<span class="t-info">INFO</span>  Server log: 20%: Written raw article
+<span class="t-info">INFO</span>  Server log: 25%: Rendered raw article to `inputs/tests/00_sample_tiny/article_000.md`
+<span class="t-info">INFO</span>  Server log: 33%: Reviewing article [Iteration 1 / 3]
+<span class="t-info">INFO</span>  Server log: 41%: Editing article
+<span class="t-info">INFO</span>  Server log: 50%: Rendered article to `inputs/tests/00_sample_tiny/article_001.md`
+<span class="t-info">INFO</span>  Server log: 58%: Reviewing article [Iteration 2 / 3]
+<span class="t-info">INFO</span>  Server log: 66%: Editing article
+<span class="t-info">INFO</span>  Server log: 75%: Rendered article to `inputs/tests/00_sample_tiny/article_002.md`
+<span class="t-info">INFO</span>  Server log: 83%: Reviewing article [Iteration 3 / 3]
+<span class="t-info">INFO</span>  Server log: 91%: Editing article
+<span class="t-info">INFO</span>  Server log: 99%: Rendered article to `inputs/tests/00_sample_tiny/article_003.md`
+<span class="t-info">INFO</span>  Server log: 100%: Final article rendered to `inputs/tests/00_sample_tiny/article.md`
+... | <span class="t-ok">SUCCESS</span>  | __main__:generate_article:63 - Article generation completed successfully
+Article generation completed successfully!</pre>
+  <figcaption>The "Generated reviews" and "Edited article" lines are left out for space. If the reviewer returns no comments in a round, you see "No reviews on iteration 2 / 3. Article meets requirements, stopping early." and fewer files.</figcaption>
+</figure>
+<p>Afterwards the folder contains the inputs plus every version:</p>
+<pre><code>inputs/tests/00_sample_tiny/
+├── article_guideline.md
+├── research.md
+├── article_000.md     <span class="c"># first draft</span>
+├── article_001.md     <span class="c"># after review round 1</span>
+├── article_002.md     <span class="c"># after review round 2</span>
+├── article_003.md     <span class="c"># after review round 3</span>
+└── article.md         <span class="c"># final version (same as the last round)</span></code></pre>
+
+<h3 id="run-diff">What the review loop changed: a real example</h3>
+<p>The sample <code>inputs/tests/01_sample_context_engineering/</code> contains a real Brown run on a 4,263-word guideline with 39,322 words of research. The draft (<code>article_000.md</code>) had 4,337 words; the final article has 4,449 words, 8 sections, 5 Mermaid diagrams and a reference list. Here is the opening, before and after the review rounds:</p>
+<div class="compare">
+  <div>
+    <h4>article_000.md, first draft</h4>
+    <span class="md-h"># Lesson 3: Context Engineering</span>
+    <span class="md-h">### The Core Skill for Building Production-Ready AI</span>
+    <p>AI applications have evolved rapidly. In 2022, we had simple chatbots ... Now, we are building memory-enabled agents ...</p>
+    <p>In our last lesson, we explored how to choose between AI agents and LLM workflows ... It optimizes single LLM calls but fails when managing systems with memory, actions, and long interaction histories. The sheer volume of information an agent might need—past conversations, user data, documents, and actio...</p>
+  </div>
+  <div class="after">
+    <h4>article.md, after review and edit</h4>
+    <span class="md-h"># Lesson 3: Context Engineering</span>
+    <span class="md-h">### The Core Skill for Building Production-Ready AI</span>
+    <span class="md-h"><mark>## When prompt engineering breaks</mark></span>
+    <p>AI applications have evolved rapidly. In 2022, we had simple chatbots ... <mark>2025 - Now</mark>, we are building memory-enabled agents ...</p>
+    <p>... It optimizes single LLM calls but fails when managing systems with memory, actions, and long interaction histories.</p>
+    <p><mark>The sheer volume of information an agent might need has grown exponentially.</mark> This includes past conversations, user data, documents, and action descriptions. ...</p>
+  </div>
+</div>
+<p>The review comments themselves are not saved to disk, but the changes line up with two rules in <code>structure_profile.md</code>: the introduction goes under its own <code>##</code> heading, and paragraphs stay at or below 80 words. The editor added the heading and split the long paragraph in two. That is the kind of specific, located fix the structured review format is designed to produce.</p>
+
+<h3 id="run-edit">Editing with feedback</h3>
+<figure class="term">
+  <div class="bar"><span>Terminal: edit the whole article, then a line range</span><span class="kind real">Captured</span></div>
+<pre><span class="t-p">$</span> <span class="t-cmd">make brown-edit-article DIR_PATH=inputs/tests/00_sample_tiny HUMAN_FEEDBACK="Make the intro shorter"</span>
+uv run python scripts/brown_mcp_cli.py edit-article --dir-path inputs/tests/00_sample_tiny --human-feedback "Make the intro shorter"
+<span class="t-dim">2026-11-15 05:30:02.772</span> | <span class="t-info">INFO</span>     | __main__:edit_article:88 - Starting article editing for directory: inputs/tests/00_sample_tiny
+<span class="t-dim">2026-11-15 05:30:02.772</span> | <span class="t-info">INFO</span>     | __main__:edit_article:89 - Human feedback: Make the intro shorter
+<span class="t-dim">2026-11-15 05:30:02.848</span> | <span class="t-ok">SUCCESS</span>  | __main__:edit_article:115 - Article editing completed successfully
+<span class="t-dim">2026-11-15 05:30:02.848</span> | <span class="t-info">INFO</span>     | __main__:edit_article:116 - Edited article saved to: inputs/tests/00_sample_tiny/article.md
+Edited article saved to: inputs/tests/00_sample_tiny/article.md
+
+<span class="t-p">$</span> <span class="t-cmd">make brown-edit-selected-text DIR_PATH=inputs/tests/00_sample_tiny HUMAN_FEEDBACK="Add a concrete example" FIRST_LINE=3 LAST_LINE=5</span>
+uv run python scripts/brown_mcp_cli.py edit-selected-text --dir-path inputs/tests/00_sample_tiny --human-feedback "Add a concrete example" --first-line 3 --last-line 5
+<span class="t-dim">2026-11-15 05:30:07.616</span> | <span class="t-info">INFO</span>     | __main__:edit_selected_text:140 - Selected lines: 3-5
+<span class="t-dim">2026-11-15 05:30:07.616</span> | <span class="t-info">INFO</span>     | __main__:edit_selected_text:151 - Extracted selected text (13 characters)
+<span class="t-dim">2026-11-15 05:30:07.698</span> | <span class="t-ok">SUCCESS</span>  | __main__:edit_selected_text:181 - Selected text editing completed successfully
+<span class="t-dim">2026-11-15 05:30:07.698</span> | <span class="t-info">INFO</span>     | __main__:edit_selected_text:182 - Updated article saved to: inputs/tests/00_sample_tiny/article.md
+Updated article saved to: inputs/tests/00_sample_tiny/article.md</pre>
+  <figcaption>Captured with the debug config (fake models), so it runs without a key. Both commands overwrite <code>article.md</code> in place; keep the folder in git if you want to compare edits.</figcaption>
+</figure>
+
+<h3 id="run-nova">Nova on its own</h3>
+<p>Start the client. It imports Nova's server into the same process, so there is nothing else to start:</p>
+<figure class="term">
+  <div class="bar"><span>Terminal: start the Nova client</span><span class="kind real">Captured</span></div>
+<pre><span class="t-p">$</span> <span class="t-cmd">cd nova-research-agent/mcp_client &amp;&amp; uv run python -m src.client</span>
+<span class="t-dim">2026-11-15 05:23:34.312</span> | <span class="t-info">INFO</span>     | logging:callHandlers:1762 | 🚀 Starting MCP client with in-memory transport...
+🛠️  Available tools: 12
+📚 Available resources: 2
+💬 Available prompts: 1
+
+Available Commands: /tools, /resources, /prompts, /prompt/&lt;name&gt;, /resource/&lt;uri&gt;, /model-thinking-switch, /quit
+
+<span class="t-you">👤 You:</span></pre>
+  <figcaption>The server's request-log lines ("Processing request of type ListToolsRequest") are removed for readability.</figcaption>
+</figure>
+<p>Load the workflow prompt, give it a folder, and the LLM works through the tools one call at a time. The client prints each call and its arguments:</p>
+<figure class="term">
+  <div class="bar"><span>Terminal: run the full research workflow</span><span class="kind ill">Illustrative</span></div>
+<pre><span class="t-you">👤 You:</span> /prompt/full_research_instructions_prompt
+
+<span class="t-dim">🤔 LLM's Thoughts:</span>
+<span class="t-dim">The user loaded the research workflow. I should list the steps and ask for the research directory.</span>
+
+💬 LLM Response: Here is the research workflow:
+1. Extract URLs and local files from the article guideline.
+2. Process local files, web pages, GitHub repos and YouTube videos.
+3. Run 3 rounds of query generation and web research.
+4. Keep only high-quality sources.
+5. Pick and fully scrape the most valuable sources.
+6. Compile everything into research.md.
+Which research directory should I use? Any changes to the workflow?
+
+<span class="t-you">👤 You:</span> The research folder is /Users/you/nova-brown-blog-agent/nova-research-agent/data/research_function_calling. Run the complete workflow.
+
+<span class="t-tool">🔧 Function Call (Tool):</span>
+<span class="t-tool">  Tool: extract_guidelines_urls</span>
+<span class="t-tool">  Arguments: {
+  "research_directory": "/Users/you/.../research_function_calling"
+}</span>
+<span class="t-tool">⚡ Executing tool 'extract_guidelines_urls' via MCP server...</span>
+<span class="t-ok">✅ Tool execution successful!</span>
+
+<span class="t-tool">🔧 Function Call (Tool):</span>
+<span class="t-tool">  Tool: scrape_and_clean_other_urls</span>
+<span class="t-tool">  Arguments: { "research_directory": "/Users/you/.../research_function_calling" }</span>
+<span class="t-tool">⚡ Executing tool 'scrape_and_clean_other_urls' via MCP server...</span>
+<span class="t-ok">✅ Tool execution successful!</span>
+
+<span class="t-dim">   ... process_github_urls, transcribe_youtube_urls ...</span>
+
+<span class="t-tool">🔧 Function Call (Tool):</span>
+<span class="t-tool">  Tool: generate_next_queries</span>
+<span class="t-tool">  Arguments: { "research_directory": "/Users/you/.../research_function_calling", "n_queries": 5 }</span>
+<span class="t-tool">⚡ Executing tool 'generate_next_queries' via MCP server...</span>
+<span class="t-ok">✅ Tool execution successful!</span>
+
+<span class="t-tool">🔧 Function Call (Tool):</span>
+<span class="t-tool">  Tool: run_web_research</span>
+<span class="t-tool">  Arguments: {
+  "research_directory": "/Users/you/.../research_function_calling",
+  "queries": [
+    "Role of tool use and function calling in autonomous AI agent architectures",
+    "Best practices for error handling and retry logic in LLM tool-calling agent loops",
+    "Security vulnerabilities and mitigation techniques for LLM function calling", ...
+  ]
+}</span>
+<span class="t-tool">⚡ Executing tool 'run_web_research' via MCP server...</span>
+<span class="t-ok">✅ Tool execution successful!</span>
+
+<span class="t-dim">   ... 2 more research rounds, then select_research_sources_to_keep,
+   select_research_sources_to_scrape, scrape_research_urls ...</span>
+
+<span class="t-tool">🔧 Function Call (Tool):</span>
+<span class="t-tool">  Tool: create_research_file</span>
+<span class="t-tool">  Arguments: { "research_directory": "/Users/you/.../research_function_calling" }</span>
+<span class="t-tool">⚡ Executing tool 'create_research_file' via MCP server...</span>
+<span class="t-ok">✅ Tool execution successful!</span>
+
+💬 LLM Response: The research workflow is complete. research.md is in the research folder, with
+sections for web research results, fully scraped sources, code sources, YouTube transcripts and
+additional sources from the guideline.
+
+<span class="t-you">👤 You:</span> /quit</pre>
+  <figcaption>The queries shown are real: they are the group titles in the sample <code>research.md</code>. The first tool reports "Found 1 GitHub URLs, 1 YouTube videos URLs, 2 other URLs, and 0 local file references" for this guideline, because of the four links in its Sources section.</figcaption>
+</figure>
+
+<h3 id="run-e2e">End to end: research and write in one go</h3>
+<p>Start the two agents as HTTP servers, then the composed server, then the client. Each command runs in its own terminal.</p>
+<figure class="term">
+  <div class="bar"><span>Terminals 1 to 3: start the servers</span><span class="kind real">Captured</span></div>
+<pre><span class="t-p">$</span> <span class="t-cmd">cd nova-research-agent/mcp_server &amp;&amp; uv run python -m src.server --transport streamable-http --port 8001</span>
+<span class="t-p">$</span> <span class="t-cmd">cd brown-writing-agent &amp;&amp; uv run python -m brown.mcp.server --transport streamable-http --port 8002</span>
+<span class="t-p">$</span> <span class="t-cmd">cd nova-brown-integration/mcp_server &amp;&amp; uv run python -m src.main --transport streamable-http --port 8003</span>
+
+<span class="t-dim"># What each endpoint exposes (listed with an MCP client):</span>
+http://127.0.0.1:8001/mcp   12 tools, 1 prompts, 2 resources
+http://127.0.0.1:8002/mcp   3 tools, 3 prompts, 2 resources
+http://127.0.0.1:8003/mcp   15 tools, 5 prompts, 4 resources
+prompts: full_research_and_writing_workflow, full_research_instructions_prompt,
+         generate_article_prompt, edit_article_prompt, edit_selected_text_prompt</pre>
+</figure>
+<figure class="term">
+  <div class="bar"><span>Terminal 4: run the end-to-end prompt</span><span class="kind ill">Illustrative</span></div>
+<pre><span class="t-p">$</span> <span class="t-cmd">cd nova-brown-integration/mcp_client &amp;&amp; uv run python -m src.client --config mcp_composed_server_config.json</span>
+🛠️  Available tools: 15
+📚 Available resources: 4
+💬 Available prompts: 5
+
+<span class="t-you">👤 You:</span> /prompt/full_research_and_writing_workflow?dir_path=/Users/you/articles/rag-basics
+
+<span class="t-dim">   ... Phase 1: the 6 Nova steps, as in the previous run ...</span>
+
+<span class="t-tool">🔧 Function Call (Tool):</span>
+<span class="t-tool">  Tool: generate_article</span>
+<span class="t-tool">  Arguments: { "dir_path": "/Users/you/articles/rag-basics" }</span>
+<span class="t-tool">⚡ Executing tool 'generate_article' via MCP server...</span>
+<span class="t-ok">✅ Tool execution successful!</span>
+
+💬 LLM Response: Research is saved in research.md and the article in article.md, with drafts
+article_000.md to article_003.md in the same folder.</pre>
+  <figcaption>The folder only needs an <code>article_guideline.md</code> to start. Nova adds <code>.nova/</code> and <code>research.md</code>; Brown adds the drafts and <code>article.md</code>.</figcaption>
+</figure>
+
+<h3 id="run-tests">Tests</h3>
+<figure class="term">
+  <div class="bar"><span>Terminal: run both test suites</span><span class="kind real">Captured</span></div>
+<pre><span class="t-p">$</span> <span class="t-cmd">cd brown-writing-agent &amp;&amp; CONFIG_FILE=configs/debug.yaml uv run pytest -q</span>
+<span class="t-ok">225 passed</span>, 5 warnings in 1.32s
+
+<span class="t-p">$</span> <span class="t-cmd">cd nova-research-agent/mcp_server &amp;&amp; uv run pytest -q</span>
+<span class="t-ok">7 passed</span> in 2.43s</pre>
+</figure>
+</section>
+
+<!-- ============================================================ INTERVIEW -->
+<section id="interview">
+<h2><span class="n">9</span>Interview follow-up questions</h2>
+<p>Try to answer each one out loud before opening it.</p>
+
+<details class="qa"><summary>Why is Nova agentic but Brown a fixed workflow? Isn't that inconsistent?</summary><div class="a">
+<p>It is deliberate. Use an agent when the next step depends on what you just observed, and a workflow when the steps are known in advance. Nova's inputs vary: one guideline has three GitHub repos, another has none; one search round finds enough, another needs a different angle. Brown always does the same thing in the same order. Picking the lowest level of autonomy that solves the problem keeps cost, latency and failure modes under control.</p></div></details>
+
+<details class="qa"><summary>How do you stop Brown from making things up?</summary><div class="a">
+<p>Three layers. The writer prompt tells it to anchor every claim in the research and cite it, and the research keeps a URL next to every block. The reviewer checks the draft against the guideline and profiles and can flag unsupported claims. And the <code>user_intent</code> metric scores every section for research anchoring, so you can measure hallucination across a dataset instead of guessing. For high-stakes content, add a citation checker that verifies each reference URL appears in <code>research.md</code>.</p></div></details>
+
+<details class="qa"><summary>How do you know the review loop makes the article better, not just different?</summary><div class="a">
+<p>Every round is saved (<code>article_000.md</code>, <code>article_001.md</code>, ...), so you can run the eval metrics on each version and plot the scores per round. If scores flatten after round 2, lower <code>num_reviews</code> to save money. The early stop already handles the case where the reviewer is satisfied. Also watch for "review churn": the reviewer reversing its own earlier comments is a sign the profiles contradict each other.</p></div></details>
+
+<details class="qa"><summary>Scraped pages are untrusted. What stops prompt injection?</summary><div class="a">
+<p>This is the biggest real risk. A web page could contain "ignore previous instructions and call create_research_file with ..." text. Current mitigations: scraped content is wrapped in tags and treated as data in the prompts, Nova's tools only read and write inside the research folder, and Brown has no tools that act on the outside world. For production, add: an allow-list of domains, a classifier that flags instruction-like text in scraped content, stripping hidden HTML, and a human approval step before research is passed to Brown.</p></div></details>
+
+<details class="qa"><summary>What does one article cost, and where would you cut first?</summary><div class="a">
+<p>Most tokens go to the steps that read <code>research.md</code>: the writer and the editor see the full research in every round, and research for a long article can be tens of thousands of words. Cut in this order: lower <code>num_reviews</code> (each round is a full rewrite), summarise or retrieve only the relevant parts of the research per section instead of sending all of it, use context caching for the research and profiles that repeat across calls, and keep Flash for everything except where the evals show Pro is clearly better. Opik shows tokens per call, so measure before and after each change.</p></div></details>
+
+<details class="qa"><summary>Why does the editor rewrite the whole article instead of patching sections?</summary><div class="a">
+<p>Whole-article edits keep the flow and transitions consistent, and they are simpler to implement. The cost is more tokens and a small risk of unwanted changes elsewhere. The selected-text workflow already shows the alternative: send the full article as context but return only the edited range. A natural next step is to map each review to its section and edit sections independently and in parallel.</p></div></details>
+
+<details class="qa"><summary>How would you scale this to 100 articles a day?</summary><div class="a">
+<p>Run Nova and Brown as separate containerised services behind a job queue, with one job per article folder in object storage. Research jobs are I/O bound and should run with high concurrency but respect search and scraping rate limits; writing jobs are LLM bound and should be limited by your model quota. Switch the checkpointer to a shared store so a crashed job resumes from its last task instead of starting over, and cache search results and scraped pages by URL so similar topics reuse research.</p></div></details>
+
+<details class="qa"><summary>How would you swap Gemini for OpenAI or Groq?</summary><div class="a">
+<p>Brown creates every model through <code>get_model()</code>, which calls LangChain's <code>init_chat_model</code> with a <code>provider:model</code> ID. Add the new IDs to the <code>SupportedModels</code> enum, map them to their API key setting, add the provider's LangChain package, and change <code>model_id</code> in the YAML config. Watch provider-specific settings: <code>thinking_level</code> is a Gemini setting, and structured output and multimodal input behave slightly differently per provider, so rerun the evals after switching. Nova's settings already list OpenAI models for its LLM-backed tools.</p></div></details>
+
+<details class="qa"><summary>Why MCP instead of plain function calling?</summary><div class="a">
+<p>Function calling is how one model calls one set of functions inside one app. MCP is how you package those functions so any app can discover and use them. With MCP, the same Nova server works from our client, Claude Desktop and Cursor, and two servers can be composed into one. Inside the client, MCP tools are still turned into function declarations for the model; MCP sits one level above function calling, it does not replace it.</p></div></details>
+
+<details class="qa"><summary>What happens if the research step fails half way?</summary><div class="a">
+<p>Partial results stay on disk in <code>.nova/</code>, so you can restart from any step ("start from step 4"). The prompt's critical failure policy makes the agent stop when a tool succeeds on zero items, instead of producing an empty <code>research.md</code>. Individual failures, such as one URL that cannot be scraped, are reported in the tool's result but do not stop the run.</p></div></details>
+
+<details class="qa"><summary>Why structured output for reviews but free text for the article?</summary><div class="a">
+<p>Reviews are consumed by code and by the next LLM call, so they need a fixed shape: which rule, where, and what is wrong. The article is consumed by humans and is Markdown already, so forcing it into JSON would only add escaping problems and cost. Use structured output when a machine reads the result.</p></div></details>
+
+<details class="qa"><summary>How would you add a human approval step?</summary><div class="a">
+<p>The file hand-off makes this easy. Stop after Nova, show the list of kept sources from <code>perplexity_sources_selected.md</code>, and let the author remove or add sources before Brown runs. With LangGraph you can also add an interrupt inside Brown, for example after the first draft, and resume from the checkpoint with the human's feedback passed in as <code>HumanFeedback</code>.</p></div></details>
+
+<details class="qa"><summary>How did you test the agents without paying for API calls?</summary><div class="a">
+<p>All models come from one factory, and the debug config sets every model to <code>"fake"</code>. The <code>FakeModel</code> returns canned responses, including structured outputs, so the real workflows, the MCP server and the CLI all run in tests. Each node defines its own default canned response, so a test only sets a mock when it needs a specific answer.</p></div></details>
+</section>
+
+<!-- ============================================================ LIMITS -->
+<section id="limits">
+<h2><span class="n">10</span>Limits and next steps</h2>
+<ul>
+  <li><strong>Brown only knows Gemini models today.</strong> Adding OpenAI or Groq is a small change in <code>models/config.py</code> and <code>models/get_model.py</code>, described in the interview answers above.</li>
+  <li><strong>The terminal clients run one tool call at a time.</strong> The prompt allows the four "process the guideline" tools in one turn, but the client executes only the first function call of each model response, so those steps run one after another.</li>
+  <li><strong>The writer sees all of the research every time.</strong> For very long research files, retrieve the relevant chunks per section instead.</li>
+  <li><strong>No guard against prompt injection from scraped pages</strong> beyond treating them as data. See the interview answer for what to add before production.</li>
+  <li><strong>Diagrams are Mermaid only.</strong> The tool-node design makes it easy to add more media tools, for example charts from tables or image generation.</li>
+</ul>
+<p>Good next steps for your portfolio version: switch Brown to a second provider and compare eval scores, add the human approval step between research and writing, and deploy Nova as a container with Postgres to store research runs.</p>
+
+<!-- awsq:bottom -->
+<div class="awsq awsq-bottom" role="navigation" aria-label="Capstone navigation (bottom)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 20 of 23 · Part 2 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../../"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement</span></a><a class="awsq-home" href="../../../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="../nova-brown-run/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../../../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../../../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../../../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../../../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../../../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../../../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../../../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../../../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../../../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../../../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../../../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../../../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../../../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../../../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../../../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../../../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../../../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../../../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../../../live-auction-house/" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="done" href="../../../live-auction-house/pages/live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="done" href="../../../live-auction-house/pages/live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="done" href="../../" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="cur" href="./" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough" aria-current="page">P20·2</a></li><li><a class="" href="../nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../../../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../../../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../../../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/balajiraghuram92/balajiraghuram92.github.io/tree/main/zips/Code/Capstone-Projects/nova-brown-blog-agent" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://balajiraghuram92.github.io/zips/Code/Zips/nova-brown-blog-agent-code.zip" download>⬇ Download all<small>.zip</small></a></div></div></div>
+<!-- /awsq:bottom -->
+<footer>
+  <p>Solution walkthrough by Shivank Agarwal, Future with Shivank. Read the <a href="../../">problem statement</a> first if you have not already. The code is in this project folder; the root <code>README.md</code> has the setup commands.</p>
+</footer>
+</section>
+
+</main>
+</div>
+</body>
+</html>

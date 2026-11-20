@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="../../../../favicon.svg"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project 19 · Part 2 · Live Auction House · Build it: Parts 1–4 · AWS AI Capstone</title>
+<meta name="description" content="Project 19, Part 2 of 3: have an AI coding agent build auctions and bids slice by slice, prove a real race with a four-window Playwright bidding war, fix it with a PostgreSQL row lock, review the agent's code and push bids live with Socket.IO and Redis.">
+<meta name="author" content="Spencer Schneidenbach (course); page by AI-Infusion">
+<script>
+  try { var t = localStorage.getItem('fws-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+<link href="../../assets/css/fonts.css" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/css/3f21a261046cc900.css">
+<style>
+/* page-specific rules only (shared look lives in live-auction.css). This one rule is required by the blueprint checker: */
+main .awsq{--q-acc:var(--accent);--q-acc-t:var(--accent-soft);--q-acc-ink:var(--accent);--q-cur:var(--bid);--q-on:#fff;--q-card2:var(--surface-2);--q-rule:var(--line);padding:0;margin:18px 0;max-width:none}
+/* page-2 extras: the flaw pull-quote and the three-card row */
+.pull{font-family:var(--serif);font-size:26px;line-height:1.35;color:var(--ink);border-left:4px solid var(--bid-strong);margin:14px 0 22px;padding:4px 0 4px 18px}
+.cards3{display:grid;gap:12px;grid-template-columns:minmax(0,1fr);margin:18px 0}
+@media (min-width:720px){.cards3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.cards3 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.cards3 .card b{display:block;color:var(--accent);margin-bottom:4px}
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<header class="hero" id="top">
+  <div class="hero-in">
+    <div class="hero-main">
+      <p class="kicker">AWS AI Capstone · Project 19 · Part 2 of 3</p>
+      <h1>Build it: from first bid to a <em>race</em> you can see</h1>
+      <p class="lede">Now the agent writes real features. You'll approve the Part 2 plan and build it one slice at a time, then do something most tutorials skip: prove a bug exists before fixing it. Two people bidding $102 in the same second both "win". You'll watch it happen in four browser windows, fix it with one database lock, have the fix reviewed, and make every open page update by itself.</p>
+      <div class="chips"><span>Fastify</span><span>Zod</span><span>PostgreSQL</span><span>FOR UPDATE</span><span>Playwright</span><span>Socket.IO</span><span>Redis</span></div>
+    </div>
+    <aside class="label" aria-label="About this part">
+      <dl>
+        <div><dt>You will</dt><dd>Build Part 2 in three slices · reproduce the bidding-war race · fix it with a row lock and an injected clock · review the AI's code · add live updates</dd></div>
+        <div><dt>Time</dt><dd>about 1 h 40 min of video (lessons 9–18), 4–5 hours hands-on</dd></div>
+        <div><dt>You need</dt><dd>Page 1 done: tools checked, <code>workshop/</code> ready, Part 2 plan approved · Microsoft Edge for the headed tests</dd></div>
+      </dl>
+      <!-- decorative bid ticker: copy this block exactly -->
+      <svg class="ticker" viewbox="0 0 280 84" aria-hidden="true" focusable="false">
+        <path d="M14 12l14 14M20 6l14 14M8 18l14 14M24 20l-14 14" stroke="#F2A93B" stroke-width="3" stroke-linecap="round" fill="none"></path>
+        <text class="row" x="48" y="26">Asha  $101</text>
+        <text class="row" x="48" y="50">Ben   $102</text>
+        <text class="row" x="48" y="74">Chen  $107</text>
+      </svg>
+    </aside>
+  </div>
+  <nav class="route" aria-label="The three parts of Project 19">
+    <!-- the current page's tile gets aria-current="page" -->
+    <a href="../../"><b>Part 1</b><span>Set up and learn the agent</span><i>Course Parts 0–1 · grilling</i></a>
+    <a href="./" aria-current="page"><b>Part 2</b><span>Build it: Parts 1–4</span><i>Bids, the race, live updates</i></a>
+    <a href="../live-auction-ship/"><b>Part 3</b><span>Ship it: Parts 5–8</span><i>Close, pay, trace</i></a>
+  </nav>
+</header>
+
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="On this page">
+    <h4>On this page</h4>
+    <a href="#recap">Where we are</a>
+    <a href="#part-2">Part 2 · Auctions, users and bids</a>
+    <a class="lvl2" href="#p2-slice1">Slice 1: catalogue and users</a>
+    <a class="lvl2" href="#p2-slice2">Slice 2: post an auction</a>
+    <a class="lvl2" href="#p2-slice3">Slice 3: bidding rules</a>
+    <a class="lvl2" href="#p2-code">The bid handler</a>
+    <a href="#race">The bidding-war bug</a>
+    <a class="lvl2" href="#sim-bidwar">Simulator: lock off, lock on</a>
+    <a class="lvl2" href="#p2-reproduce">Prove it with four windows</a>
+    <a href="#part-3">Part 3 · Fix it with a row lock</a>
+    <a class="lvl2" href="#p3-slice1">Slice 1: the lock</a>
+    <a class="lvl2" href="#p3-slice2">Slice 2: closing on time</a>
+    <a class="lvl2" href="#isolation">Transactions vs locks</a>
+    <a href="#review">Review the AI's code</a>
+    <a href="#part-4">Part 4 · Live updates</a>
+    <a href="#quiz">Check yourself</a>
+    <a href="#next">Next: ship it</a>
+  </nav>
+  <main id="main">
+<!-- awsq:top -->
+<style>
+.awsq{--q-card:var(--card,var(--surface,#fff));--q-card2:var(--card-2,var(--surface-2,#f3f3f0));--q-rule:var(--rule,var(--line,#ddd));
+  --q-ink:var(--ink,#1a1a1a);--q-muted:var(--muted,#666);--q-acc:var(--tool,var(--accent,#0b7f73));--q-acc-t:var(--tool-t,var(--accent-soft,#d6f2ee));
+  --q-acc-ink:var(--tool-ink,var(--accent,#075a51));--q-cur:var(--brain,var(--gold,#b07600));--q-on:var(--card,var(--surface,#fff));
+  --q-focus:var(--focus,var(--accent,#2958c4));--q-mono:var(--font-mono,"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace);
+  max-width:72rem;margin:18px auto;padding:0 40px;font-family:var(--font-body,inherit)}
+.awsq-box{background:var(--q-card);border:1px solid var(--q-rule);border-radius:12px;padding:12px 14px}
+.awsq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}
+.awsq-cap{display:block;margin:0;font:600 .7rem/1.4 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-row{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.awsq-l{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;padding:9px 13px;border-radius:9px;border:1px solid var(--q-rule);color:var(--q-ink);text-decoration:none;font-size:.95rem;line-height:1.3}
+a.awsq-l:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-next{text-align:right;align-items:flex-end}
+.awsq-d{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--q-acc)}
+.awsq-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+span.awsq-l{border-style:dashed;color:var(--q-muted)} span.awsq-l .awsq-d,span.awsq-l .awsq-t{color:var(--q-muted);font-weight:400}
+a.awsq-home{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:6px 12px;border-radius:9px;text-decoration:none;color:var(--q-ink);text-align:center;font-size:.85rem;line-height:1.3}
+a.awsq-home:hover{background:var(--q-card2);text-decoration:none}
+.awsq-home b{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-steps{display:flex;gap:5px;margin:11px 0 0;padding:0;list-style:none}
+.awsq-steps li{flex:1 1 0;margin:0;padding:0;list-style:none}
+.awsq-steps li::before{content:none}
+.awsq-steps a{display:block;text-align:center;padding:4px 0;border-radius:5px;font:600 .75rem/1.4 var(--q-mono);text-decoration:none;background:var(--q-card2);border:1px solid var(--q-rule);color:var(--q-muted)}
+.awsq-steps a.done{background:var(--q-acc-t);color:var(--q-acc-ink);border-color:transparent}
+.awsq-steps a.cur{background:var(--q-cur);color:var(--q-on);border-color:transparent}
+.awsq-steps a:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-recs{display:flex;flex-wrap:wrap;gap:8px;margin:11px 0 0}
+.awsq-rec{flex:1 1 220px;display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:9px;border:1px solid var(--q-acc);background:var(--q-acc-t);
+  color:var(--q-acc-ink);font-weight:700;font-size:.92rem;line-height:1.3;text-decoration:none}
+a.awsq-rec:hover{text-decoration:none;filter:brightness(.97)}
+.awsq-rec i{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--q-acc);color:var(--q-on);font-style:normal;font-size:.7rem}
+.awsq-rec small{margin-left:auto;font:600 .68rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+.awsq-files{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+.awsq-files > b{margin-right:4px;font:600 .7rem/1.3 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-fb{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-rule);color:var(--q-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-fb:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-fb small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+span.awsq-fb{border-style:dashed;color:var(--q-muted);font-weight:600}
+.awsq a:focus-visible{outline:2px solid var(--q-focus);outline-offset:2px}
+.awsq a.aih{flex:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:var(--q-acc);color:var(--q-on);
+  font:700 .74rem/1.2 var(--q-mono);letter-spacing:.04em;text-decoration:none;white-space:nowrap}
+.awsq a.aih:hover{filter:brightness(1.08);text-decoration:none}
+.awsq-ver{display:flex;justify-content:flex-end;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+a.awsq-vl{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-acc);color:var(--q-acc-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-vl:hover{background:var(--q-acc-t);text-decoration:none}
+.awsq-vl small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-bottom{padding:0 !important;margin:48px 0 8px;max-width:none}
+.awsq-inmain{padding:0 !important;margin:0 0 28px;max-width:none}
+@media (max-width:1100px){.awsq{padding:0 24px}}
+@media (max-width:640px){.awsq-steps{flex-wrap:wrap}.awsq-steps li{flex:1 0 28px}.awsq{padding:0 16px}.awsq-t{white-space:normal;overflow-wrap:anywhere}.awsq-row{grid-template-columns:1fr 1fr}a.awsq-home{grid-column:1 / -1;grid-row:1;flex-direction:row;gap:8px}a.awsq-rec small{display:none}}
+@media print{.awsq{display:none}}
+</style>
+<div class="awsq awsq-top awsq-inmain" role="navigation" aria-label="Capstone navigation (top)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 19 of 23 · Part 2 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../../"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent</span></a><a class="awsq-home" href="../../../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="../live-auction-ship/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../../../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../../../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../../../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../../../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../../../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../../../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../../../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../../../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../../../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../../../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../../../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../../../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../../../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../../../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../../../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../../../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../../../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../../../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../../" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="cur" href="./" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4" aria-current="page">P19·2</a></li><li><a class="" href="../live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="" href="../../../nova-brown-blog-writer/" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="" href="../../../nova-brown-blog-writer/pages/nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="" href="../../../nova-brown-blog-writer/pages/nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../../../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../../../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../../../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/archive/refs/heads/master.zip">⬇ Download all<small>.zip from GitHub</small></a></div></div></div>
+<!-- /awsq:top -->
+    <details class="mobile-toc"><summary>☰ Contents</summary><a href="#recap">Where we are</a>
+<a href="#part-2">Part 2 · Auctions, users and bids</a>
+<a class="lvl2" href="#p2-slice1">Slice 1: catalogue and users</a>
+<a class="lvl2" href="#p2-slice2">Slice 2: post an auction</a>
+<a class="lvl2" href="#p2-slice3">Slice 3: bidding rules</a>
+<a class="lvl2" href="#p2-code">The bid handler</a>
+<a href="#race">The bidding-war bug</a>
+<a class="lvl2" href="#sim-bidwar">Simulator: lock off, lock on</a>
+<a class="lvl2" href="#p2-reproduce">Prove it with four windows</a>
+<a href="#part-3">Part 3 · Fix it with a row lock</a>
+<a class="lvl2" href="#p3-slice1">Slice 1: the lock</a>
+<a class="lvl2" href="#p3-slice2">Slice 2: closing on time</a>
+<a class="lvl2" href="#isolation">Transactions vs locks</a>
+<a href="#review">Review the AI's code</a>
+<a href="#part-4">Part 4 · Live updates</a>
+<a href="#quiz">Check yourself</a>
+<a href="#next">Next: ship it</a>
+</details>
+
+    <!-- ============ 1. RECAP ============ -->
+    <section class="sec" id="recap">
+      <p class="eyebrow">Recap</p>
+      <h2>Where we are</h2>
+
+      <ol class="course-route" aria-label="The eight course parts">
+        <li style="--pc:var(--p1)" class="done"><span class="n">1</span><b>Foundation</b><small>Is the stack alive?</small></li>
+        <li style="--pc:var(--p2)" class="here"><span class="n">2</span><b>Auctions &amp; bids</b><small>List, bid, check the rules</small></li>
+        <li style="--pc:var(--p3)" class="here"><span class="n">3</span><b>The race</b><small>Only one $102 wins</small></li>
+        <li style="--pc:var(--p4)" class="here"><span class="n">4</span><b>Live updates</b><small>Pages change by themselves</small></li>
+        <li style="--pc:var(--p5)"><span class="n">5</span><b>Hidden defect</b><small>Find the planted bug</small></li>
+        <li style="--pc:var(--p6)"><span class="n">6</span><b>Closing</b><small>Tell the winner, crash-proof</small></li>
+        <li style="--pc:var(--p7)"><span class="n">7</span><b>Checkout</b><small>Chen pays, provably</small></li>
+        <li style="--pc:var(--p8)"><span class="n">8</span><b>Tracing</b><small>Follow one auction end to end</small></li>
+      </ol>
+
+      <p>On Page 1 you set up your machine and agent, ran Part 1's health check, and grilled the agent for Part 2. You should have <code>workshop/part-2-create-auction-and-bid/</code> as a copy of Part 1 (ports 3102/5102, database <code>auction_part_2</code>) with a <code>GRILL.md</code> and an approved slice list. If you skipped that, go back to <a href="../../#plan-part-2">Open Part 2's design</a> first.</p>
+
+      <p>The running example stays the same: Dana sells a <b>used GPU</b> starting at <b>$100</b>, closing at <b>6:00 pm</b>. Asha, Ben and Chen bid.</p>
+
+      <div class="box note"><span class="tag">Names</span><p>The repo seeds its own ten demo users (Avery Chen, Maya Thompson, Theo Brooks, Priya Shah and others), and its tests use them. On this page, Dana, Asha, Ben and Chen are our story; in your running app, pick any four of the seeded users to play them.</p></div>
+
+      <p><b>Habits for this page</b></p>
+      <ol class="walk">
+        <li>One chat per part. Start a <b>new chat</b> for each part so old context doesn't leak in.</li>
+        <li>One slice per message. Build, check, stop. You approve each slice.</li>
+        <li>Commit after each approved slice: <code>git add -A &amp;&amp; git commit -m "Part 2 slice 1: catalogue and users"</code>.</li>
+        <li>If something looks wrong, ask for evidence ("show me the test output") before asking for a fix.</li>
+      </ol>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 2. PART 2 STATION ============ -->
+    <section class="sec station" id="part-2" style="--pc:var(--p2)">
+      <header class="st-head">
+        <span class="st-badge">Part 2</span>
+        <h2>Auctions, users and bids</h2>
+        <p class="st-goal"><b>Goal</b> Dana can list the GPU, Asha, Ben and Chen can bid, and the server enforces every rule.</p>
+        <p class="st-meta"><span>Folder <code>part-2-create-auction-and-bid</code></span><span>Web :5102 · API :3102</span><span>≈ 21 min of video</span></p>
+      </header>
+
+      <p>Part 2 turns the static catalogue from Part 1 into a real marketplace backed by PostgreSQL. It's built in the three slices you approved. Each slice touches every layer: a SQL migration, an API route validated with <b>Zod</b> (a library that checks the shape of incoming data and rejects anything else), and a React page.</p>
+
+      <!-- block 2: decisions, agreed on Page 1 -->
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Already agreed on Page 1</p>
+        <details class="pb-why"><summary>Show the Part 2 decisions again</summary>
+<div class="tw"><table class="tbl">
+<thead><tr>
+<th scope="col">Question</th>
+<th scope="col">Decision</th>
+<th scope="col">Why it matters</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Question">Who are the users?</td><td data-label="Decision">Ten demo users, seeded in the database. No login. A footer switcher picks the active user; each new browser tab starts as a random user and keeps it through reloads (<code>sessionStorage</code>). The header shows the active user's name.</td><td data-label="Why it matters">Lets you test "seller vs bidder" in two tabs without building authentication.</td></tr>
+<tr><td data-label="Question">How is money stored?</td><td data-label="Decision">US dollars as <b>integer cents</b> (<code>$101.50</code> = <code>10150</code>).</td><td data-label="Why it matters">No floating-point rounding; the database can compare amounts exactly.</td></tr>
+<tr><td data-label="Question">What does a listing need?</td><td data-label="Decision">Title, category, description, condition, location, starting price and a future closing time. The seller is the active user. Listings publish immediately.</td><td data-label="Why it matters">A complete form that maps one-to-one to table columns.</td></tr>
+<tr><td data-label="Question">How is time stored?</td><td data-label="Decision">Closing times in <b>UTC</b> (<code>timestamptz</code>).</td><td data-label="Why it matters">Everyone agrees on when 6:00 pm is, whatever their time zone.</td></tr>
+<tr><td data-label="Question">Pictures?</td><td data-label="Decision">Pick an illustration by category. No uploads, no external image links.</td><td data-label="Why it matters">Keeps the slice about auctions, not file storage.</td></tr>
+<tr><td data-label="Question">Who may bid?</td><td data-label="Decision">Anyone except the seller of that auction.</td><td data-label="Why it matters">A seller bidding up their own item is shill bidding. Enforced by the API.</td></tr>
+<tr><td data-label="Question">What's a valid bid?</td><td data-label="Decision">At least <b>$1 above</b> the current amount, checked by the API. Ended auctions stay visible but reject bids. Every accepted bid is stored with bidder, amount and time.</td><td data-label="Why it matters">The rule lives where nobody can skip it.</td></tr>
+<tr><td data-label="Question">Two bids at the same moment?</td><td data-label="Decision">Only ordinary, one-at-a-time behaviour is promised in Part 2. Simultaneous bids are <b>deferred to Part 3</b>.</td><td data-label="Why it matters">Written down as known and deferred, so it can't be forgotten.</td></tr>
+<tr><td data-label="Question">Resetting demo data?</td><td data-label="Decision"><code>npm run db:reset</code> drops and recreates <b>only</b> <code>auction_part_2</code>, restoring the ten users and six seeded auctions. Normal restarts keep data.</td><td data-label="Why it matters">Safe to reset one part while others run.</td></tr>
+</tbody>
+</table></div>
+        </details>
+      </div>
+
+      <!-- ===== Slice 1 ===== -->
+      <h3 id="p2-slice1">Slice 1: catalogue and users</h3>
+      <div class="prompt-box" id="p2-prompt-s1">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p2-prompt-s1 &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">Same chat as the Part 2 grilling (it has the plan). Effort: <b>Medium</b>.</p>
+        <pre class="pb-text">Approved. Build Slice 1 only: the catalogue from PostgreSQL plus demo-user switching.
+
+Scope, in part-2-create-auction-and-bid only:
+- A SQL migration that creates users and auctions tables and seeds the 10 demo users
+  and the 6 existing catalogue items (prices converted to integer cents).
+- API routes: list auctions (with a ?q= search), get one auction by slug, list users.
+  Validate query and path parameters with Zod.
+- The web app reads catalogue, search and detail pages from the API instead of the
+  local file. Footer user switcher; header shows the active user's name.
+
+Don't build posting or bidding yet, and don't add packages beyond what the plan needs.
+
+Done means, and show me the evidence for each:
+1. npm run db:reset, then npm test: all tests pass, including new API tests for the
+   three routes.
+2. Both workspaces type-check with no errors (tsc --noEmit in server and web).
+3. In a visible browser: the home page shows 6 auctions from the API, search for
+   "GPU" narrows the list, a detail page opens, and switching user changes the name
+   in the header.
+4. curl http://localhost:3102/api/users returns 10 users.
+
+Then stop. List the files you changed and give me 3-5 browser steps to check it myself.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><p>It restates the slice boundary ("don't build posting or bidding yet"), because agents love to run ahead. Each "done" item names a command or a click, so you can tell a real check from a claim. Asking for browser steps at the end gives <i>you</i> a 2-minute review script.</p></details>
+      </div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li><code>npm test</code> green, with tests for users, list/search and detail;</li>
+          <li>6 seeded auctions from the database (stop the API and the page shows an error, proving it's not the old local file);</li>
+          <li>a footer switcher, the active user's name top right;</li>
+          <li><code>/api/users</code> returns 10 users.</li>
+        </ul>
+        <div class="term" role="img" aria-label="Terminal output: the users API returns a JSON list that begins with Avery Chen and Maya Thompson">
+          <div class="term-bar"><i></i><i></i><i></i><span>Terminal · part-2</span></div>
+          <pre><span class="ps">$</span> curl -s http://localhost:3102/api/users | head -c 160
+[{"id":1,"displayName":"Avery Chen","handle":"avery"},{"id":2,"displayName":"Maya Thompson","handle":"maya"},…</pre>
+        </div>
+        <p class="src">(The exact JSON shape may differ in your build; 10 entries is what matters.)</p>
+      </div>
+
+      <p><b>Steer: a common first result.</b> Many agents first store the active user in <code>localStorage</code>, so every tab is the same person. That breaks the next slices: you need Dana in one tab and Ben in another. If that happens, send:</p>
+
+      <div class="prompt-box" id="p2-prompt-steer">
+        <div class="pb-head">
+          <span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Steer</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p2-prompt-steer &gt; .pb-text">Copy</button>
+        </div>
+        <pre class="pb-text">Change how the active user is chosen. Each new browser tab should start as a random
+seeded user and keep that user through reloads and navigation in that tab only
+(sessionStorage, not localStorage), so two tabs can be two different people. Keep the
+footer switcher, and keep the active user's name in the header.
+
+Update GRILL.md with this decision and update or add tests for it. Run the tests and
+type checks, check it in two visible browser tabs, then stop.</pre>
+      </div>
+
+      <div class="box key"><span class="tag">Key lesson</span><p>This is how you steer: say what's wrong in terms of behaviour, name the mechanism you want, and ask for the decision record and tests to change with the code. A steer that only changes code leaves <code>GRILL.md</code> lying.</p></div>
+
+      <p><b>Commit:</b> <code>git add -A &amp;&amp; git commit -m "Part 2 slice 1: catalogue from PostgreSQL, per-tab demo users"</code></p>
+
+      <!-- ===== Slice 2 ===== -->
+      <h3 id="p2-slice2">Slice 2: post an auction</h3>
+      <div class="prompt-box" id="p2-prompt-s2">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p2-prompt-s2 &gt; .pb-text">Copy</button>
+        </div>
+        <pre class="pb-text">Slice 1 is approved and committed. Build Slice 2 only: post an auction as the active user.
+
+- A "Sell" page with title, category, description, condition, location, starting price
+  (dollars in the form, stored as integer cents) and closing time.
+- The seller is the active user; the browser never sends a seller name.
+- The API validates everything with Zod and rejects a closing time that isn't in the
+  future. Listings publish immediately; closing times are stored in UTC.
+- Pick the illustration from the category. No image upload.
+- After posting, go to the new auction's detail page.
+
+Done: API tests for valid and invalid listings pass, both workspaces type-check, and
+in a visible browser you post "Used GPU", GPUs, starting at $100.00, closing in 30
+minutes, and land on its page showing $100 and the right seller. Then stop.</pre>
+      </div>
+
+      <p><b>Worked example</b></p>
+      <figure class="wire">
+        <svg viewbox="0 0 680 300" role="img" aria-label="Dana's listing: the form on the left, the new auction page on the right" style="font-family:var(--sans)">
+          <defs><marker id="arrowhead3" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" style="color:var(--muted)"></path></marker></defs>
+          <rect class="bx" x="20" y="20" width="300" height="260" rx="10"></rect>
+          <text x="36" y="46" font-weight="700">Sell (as Dana)</text>
+          <text class="mut" x="36" y="70">Title</text>
+          <rect class="bx" x="36" y="76" width="268" height="26" rx="6"></rect>
+          <text x="46" y="94">Used GPU</text>
+          <text class="mut" x="36" y="116">Category</text>
+          <rect class="bx" x="36" y="122" width="268" height="26" rx="6"></rect>
+          <text x="46" y="140">GPUs</text>
+          <text class="mut" x="36" y="162">Starting price</text>
+          <rect class="bx" x="36" y="168" width="268" height="26" rx="6"></rect>
+          <text class="price" x="46" y="186">$100.00</text>
+          <text class="mut" x="36" y="208">Closing</text>
+          <rect class="bx" x="36" y="214" width="268" height="26" rx="6"></rect>
+          <text x="46" y="232">Today 6:00 pm</text>
+          <rect x="36" y="250" width="140" height="28" rx="8" style="fill:var(--accent)"></rect>
+          <text x="56" y="268" style="fill:var(--surface)">Post auction</text>
+          <path d="M326 150 H352" stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#arrowhead3)"></path>
+          <rect class="bx" x="360" y="20" width="300" height="260" rx="10"></rect>
+          <text x="376" y="46" font-weight="700">/items/used-gpu</text>
+          <rect x="376" y="60" width="268" height="110" rx="8" style="fill:var(--surface-2)"></rect>
+          <rect x="430" y="92" width="160" height="46" rx="6" style="fill:var(--line)"></rect>
+          <text class="mut" x="450" y="120">GPU illustration</text>
+          <text x="376" y="194" font-size="18" font-weight="700">Used GPU</text>
+          <text class="price" x="376" y="216">$100 · Starting price</text>
+          <text class="mut" x="376" y="236">No bids yet</text>
+          <text x="376" y="254">Ends 6:00 pm</text>
+          <text x="376" y="272">Sold by Dana</text>
+        </svg>
+        <figcaption>In class, use 'closing in 30 minutes' so you don't have to wait until six.</figcaption>
+      </figure>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li>a working form;</li>
+          <li>bad input (empty title, a closing time in the past) is rejected by the API with a 400 and shown next to the field;</li>
+          <li>the new listing appears on the home page.</li>
+        </ul>
+      </div>
+
+      <p><b>Commit:</b> <code>git commit -am "Part 2 slice 2: post an auction"</code></p>
+
+      <!-- ===== Slice 3 ===== -->
+      <h3 id="p2-slice3">Slice 3: bidding rules</h3>
+      <div class="prompt-box" id="p2-prompt-s3">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p2-prompt-s3 &gt; .pb-text">Copy</button>
+        </div>
+        <pre class="pb-text">Slice 2 is approved and committed. Build Slice 3 only: place, validate, store and list bids.
+
+Rules, enforced by the API (the form may show them too, but the API decides):
+- the active user can't bid on their own auction,
+- a bid must be at least $1 (100 cents) above the current amount (the highest bid,
+  or the starting price if there are none),
+- an auction whose closing time has passed rejects bids but stays visible,
+- every accepted bid is stored with bidder, amount and time, and shown newest first
+  in a bid history on the detail page.
+
+Return 201 for an accepted bid; for a rule violation return 409 with a readable error
+and the minimum acceptable amount. Keep GRILL.md's note that simultaneous bids are
+deferred to Part 3: don't add locking yet.
+
+Done: API tests cover all four rules and an accepted bid; both workspaces type-check;
+in two visible browser tabs (seller and bidder) you walk through the five tries I'll
+list next and each gives the expected result. Then stop.</pre>
+      </div>
+
+      <p><b>Five tries</b></p>
+<div class="tw"><table class="tbl">
+<thead><tr>
+<th scope="col">Who</th>
+<th scope="col">Tries</th>
+<th scope="col">Expected</th>
+<th scope="col">Why</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Who">Dana (the seller)</td><td data-label="Tries">$150</td><td data-label="Expected">✗ 409 "Sellers cannot bid on their own auctions"</td><td data-label="Why">Shill bidding is blocked by the API</td></tr>
+<tr><td data-label="Who">Asha</td><td data-label="Tries">$100</td><td data-label="Expected">✗ 409 "Bid must be at least $1 above the current amount", minimum $101</td><td data-label="Why">With no bids, the current amount is the $100 start</td></tr>
+<tr><td data-label="Who">Asha</td><td data-label="Tries">$101</td><td data-label="Expected">✓ 201, Asha leads, history shows 1 bid</td><td data-label="Why">Exactly the minimum is fine</td></tr>
+<tr><td data-label="Who">Ben</td><td data-label="Tries">$101</td><td data-label="Expected">✗ 409, minimum $102</td><td data-label="Why">Must beat Asha's $101 by $1</td></tr>
+<tr><td data-label="Who">Ben, after the closing time</td><td data-label="Tries">$110</td><td data-label="Expected">✗ 409 "This auction has ended"</td><td data-label="Why">Ended auctions stay visible, but closed</td></tr>
+</tbody>
+</table></div>
+      <p class="src">Error texts are the repo's; yours may be worded differently. The status code and the minimum must match.</p>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li>the five results above;</li>
+          <li>the bid history lists Asha's $101;</li>
+          <li>the price and "minimum bid" update after each accepted bid.</li>
+        </ul>
+      </div>
+
+      <p><b>Commit points timeline</b></p>
+      <figure class="diagram">
+        <svg viewbox="0 0 680 90" role="img" aria-label="Commit timeline: three commits for slice 1 catalogue and users, slice 2 post, and slice 3 bids, then Part 2 done" style="fill:var(--ink);font-family:var(--sans)">
+          <line x1="30" y1="30" x2="650" y2="30" stroke="var(--line)" stroke-width="3"></line>
+          <circle cx="110" cy="30" r="7" style="fill:var(--accent)"></circle>
+          <circle cx="310" cy="30" r="7" style="fill:var(--accent)"></circle>
+          <circle cx="510" cy="30" r="7" style="fill:var(--accent)"></circle>
+          <path d="M630 30 V8 L652 14 L630 20" stroke="var(--bid)" stroke-width="2" fill="var(--bid-strong)"></path>
+          <text x="110" y="52" font-size="12" text-anchor="middle">slice 1 · catalogue + users</text>
+          <text x="110" y="70" font-size="12" text-anchor="middle" style="font-family:var(--mono);fill:var(--muted)">a1c3e0f</text>
+          <text x="310" y="52" font-size="12" text-anchor="middle">slice 2 · post</text>
+          <text x="310" y="70" font-size="12" text-anchor="middle" style="font-family:var(--mono);fill:var(--muted)">5b2d9a7</text>
+          <text x="510" y="52" font-size="12" text-anchor="middle">slice 3 · bids</text>
+          <text x="510" y="70" font-size="12" text-anchor="middle" style="font-family:var(--mono);fill:var(--muted)">e04f6c1</text>
+          <text x="612" y="52" font-size="12" text-anchor="middle" font-weight="700">Part 2 done</text>
+        </svg>
+        <figcaption>One commit per approved slice. If a later slice goes wrong, you can always get back to the last good one.</figcaption>
+      </figure>
+
+      <!-- ===== The bid handler ===== -->
+      <h3 id="p2-code">The bid handler</h3>
+      <details class="solution-reveal code-reveal">
+        <summary>View code: the Part 2 bid handler (and its gap)</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-2-create-auction-and-bid/server/src/app.ts</code> · lines 249–264 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-2-create-auction-and-bid/server/src/app.ts#L249-L264" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">app.ts · lines 249–264</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="249">    const auctionResult = await pool.query&lt;{</span>
+<span class="l" data-n="250">      id: string;</span>
+<span class="l" data-n="251">      seller_user_id: number;</span>
+<span class="l" data-n="252">      ends_at: Date;</span>
+<span class="l" data-n="253">      current_price_cents: number;</span>
+<span class="l" data-n="254">    }&gt;(</span>
+<span class="l hl" data-n="255">      `SELECT a.id::text, a.seller_user_id, a.ends_at,</span>
+<span class="l hl" data-n="256">         COALESCE(max(b.amount_cents), a.starting_price_cents)::int AS current_price_cents</span>
+<span class="l hl" data-n="257">       FROM auctions a</span>
+<span class="l hl" data-n="258">       LEFT JOIN bids b ON b.auction_id = a.id</span>
+<span class="l hl" data-n="259">       WHERE a.slug = $1</span>
+<span class="l hl" data-n="260">       GROUP BY a.id`,</span>
+<span class="l" data-n="261">      [params.data.slug],</span>
+<span class="l" data-n="262">    );</span>
+<span class="l" data-n="263">    const auction = auctionResult.rows[0];</span>
+<span class="l" data-n="264">    if (!auction) return reply.code(404).send({ error: 'Auction not found' });</span>
+</code></pre>
+          </div>
+          <p class="cr-file"><code>part-2-create-auction-and-bid/server/src/app.ts</code> · lines 272–292 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-2-create-auction-and-bid/server/src/app.ts#L272-L292" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">app.ts · lines 272–292</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="272">    if (auction.seller_user_id === bidder.id) {</span>
+<span class="l" data-n="273">      return reply.code(409).send({ error: 'Sellers cannot bid on their own auctions' });</span>
+<span class="l" data-n="274">    }</span>
+<span class="l" data-n="275">    if (auction.ends_at.getTime() &lt;= Date.now()) {</span>
+<span class="l" data-n="276">      return reply.code(409).send({ error: 'This auction has ended' });</span>
+<span class="l" data-n="277">    }</span>
+<span class="l" data-n="278"></span>
+<span class="l" data-n="279">    const minimumBidCents = auction.current_price_cents + 100;</span>
+<span class="l" data-n="280">    if (body.data.amountCents &lt; minimumBidCents) {</span>
+<span class="l" data-n="281">      return reply.code(409).send({</span>
+<span class="l" data-n="282">        error: 'Bid must be at least $1 above the current amount',</span>
+<span class="l" data-n="283">        minimumBidCents,</span>
+<span class="l" data-n="284">      });</span>
+<span class="l" data-n="285">    }</span>
+<span class="l" data-n="286"></span>
+<span class="l hl" data-n="287">    const inserted = await pool.query&lt;{ id: string; amount_cents: number; created_at: Date }&gt;(</span>
+<span class="l hl" data-n="288">      `INSERT INTO bids (auction_id, bidder_user_id, amount_cents)</span>
+<span class="l hl" data-n="289">       VALUES ($1, $2, $3)</span>
+<span class="l hl" data-n="290">       RETURNING id::text, amount_cents, created_at`,</span>
+<span class="l hl" data-n="291">      [auction.id, bidder.id, body.data.amountCents],</span>
+<span class="l hl" data-n="292">    );</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>249–262</code> One query reads the auction and its current price: the highest bid, or the starting price if there are none (<code>COALESCE</code>). It's an ordinary query on the shared pool, <b>not</b> inside a transaction.</li>
+            <li><code>272–277</code> The seller and closing-time rules. Note <code>Date.now()</code>: the server's clock, read at this moment.</li>
+            <li><code>279–285</code> The minimum is the current price plus 100 cents. A low bid gets a 409 with <code>minimumBidCents</code>, so the page can show the right number.</li>
+            <li><code>287–292</code> The insert is a <b>separate</b> statement, run later. Between line 255 and line 288, other requests can read the same price and insert their own bids. Nothing ties "the price I checked" to "the price when I insert". That gap is the bug in the next section.</li>
+          </ol>
+        </div>
+      </details>
+
+      <div class="checkpoint" data-ck="p2:part-2">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 6</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="s1"> <span>Slice 1: 6 auctions from PostgreSQL, per-tab users, <code>/api/users</code> returns 10</span></label></li>
+          <li><label><input type="checkbox" data-id="s2"> <span>Slice 2: I posted "Used GPU" at $100 and landed on its page</span></label></li>
+          <li><label><input type="checkbox" data-id="s3"> <span>Slice 3: all five tries gave the expected result</span></label></li>
+          <li><label><input type="checkbox" data-id="api"> <span>The rules are enforced by the API (I tried at least one with curl, not the form)</span></label></li>
+          <li><label><input type="checkbox" data-id="commits"> <span>Three commits, one per slice</span></label></li>
+          <li><label><input type="checkbox" data-id="gap"> <span>I can point to the lines where the price is read and where the bid is inserted</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/auctions-users/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Auctions &amp; Users</span><span class="w-time">01:27:32 · 10 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/bidding-constraints/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Bidding &amp; Constraints</span><span class="w-time">01:37:13 · 11 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 3. THE BIDDING-WAR BUG ============ -->
+    <section class="sec" id="race">
+      <p class="eyebrow">The heart of this page</p>
+      <h2>The bidding-war bug</h2>
+      <p>Every test passes. Every rule is enforced. And the auction is still broken.</p>
+
+      <p class="eyebrow">The flaw in one line</p>
+      <blockquote class="pull">Read the current price, check the bid, insert it: three steps that two requests can run at the same time, so both read $101 and both insert $102.</blockquote>
+
+      <p>Each request is correct on its own. Ben's request reads $101, sees that $102 is at least $1 more, and saves it. Chen's request does exactly the same, a few milliseconds later, against the same $101, because Ben's bid isn't saved yet when Chen's request reads the price. Two accepted $102 bids. Both see "you are the highest bidder".</p>
+
+      <p>This is a <b>race condition</b>: the result depends on the timing of things running at once. Ordinary tests miss it because they send one request, wait for the answer, then send the next. Real users don't wait for each other, especially in the last seconds of an auction.</p>
+
+      <div class="sim" id="sim-bidwar" data-sim="bidwar" data-modes="off,on" aria-labelledby="sim-bidwar-h">
+        <span class="tag">Simulator</span><h4 id="sim-bidwar-h">Simulator: lock off, lock on</h4>
+        <p class="sim-intro">Step through Ben's and Chen's requests. Start with the lock off, as in Part 2's code; then switch the lock on, as Part 3 will.</p>
+      </div>
+
+      <h3>Ask before fixing</h3>
+      <p>First, check the agent can see the problem without being told the answer. This is a <b>review-only</b> prompt.</p>
+
+      <div class="prompt-box" id="p2-prompt-ask">
+        <div class="pb-head">
+          <span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Review only</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p2-prompt-ask &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> in <code>~/code/workshop</code>. Effort: <b>High</b>.</p>
+        <pre class="pb-text">Look at the bid endpoint in part-2-create-auction-and-bid/server/src. Don't change any
+files; this is analysis only.
+
+Question: can two requests that arrive at the same moment both pass validation against
+the same old price? Answer with:
+1. yes or no,
+2. if yes, one concrete timeline with two bidders (who reads what, in which order, and
+   what ends up in the bids table),
+3. which lines of code allow it,
+4. why the existing tests don't catch it.
+Don't propose a fix yet.</pre>
+      </div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <p>"Yes", a timeline like the simulator's lock-off mode, the read at the auction <code>SELECT</code> and the separate <code>INSERT</code>, and "the tests send requests one at a time". If the agent says "no" or hand-waves, ask: "Walk through two requests interleaved step by step."</p>
+      </div>
+
+      <h3 id="p2-reproduce">Prove it with four windows</h3>
+      <p>A good engineer proves a bug exists before fixing it, so that afterwards you can prove it's gone. The course does this with a <b>headed Playwright test</b> called the <i>bidding war</i>: four real browser windows (one seller and three bidders), a short auction, and bids fired at the same instant.</p>
+
+      <div class="prompt-box" id="p2-prompt-war">
+        <div class="pb-head">
+          <span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Test first</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p2-prompt-war &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">Same chat. Effort: <b>High</b>.</p>
+        <pre class="pb-text">Before anything is fixed, prove the race. Work in part-2-create-auction-and-bid only and
+don't change the bid endpoint.
+
+Write a headed Playwright test, tests/bidding-war.spec.ts, using Microsoft Edge:
+- Four separate browser windows (separate contexts, so separate sessionStorage users):
+  one seller and three bidders. Tile them in a 2x2 grid so all four are visible.
+- The seller posts an auction through the UI; then set its closing time to about 20
+  seconds from now directly in the database so the test doesn't wait minutes.
+- Bids: one opening bid; then two bidders submit the SAME amount at the same instant;
+  then a wave where all three bid different amounts at once; then all three at the
+  last second; then one attempt just after closing, which must be rejected.
+- Real requests can be too fast to collide reliably. Widen the window with a test-only
+  delay on bid inserts for this auction (for example a temporary trigger), and remove
+  it in a finally block.
+- Show the bid history in every window.
+- The test PASSES when it finds at least one duplicate accepted amount in the database.
+  Print the duplicates.
+
+Add "test:bidding-war" to package.json (headed, Edge) and a BIDDING_WAR_HOLD_MS option
+that keeps the windows open at the end so I can look. If you can't open visible windows
+here, tell me instead of running headless.
+
+Run it once and show me the output. Don't fix the endpoint.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary>
+          <ul>
+            <li>It describes the <em>shape</em> of the test (windows, timeline, assertion) but leaves the code to the agent.</li>
+            <li>"Widen the window" is the trick that makes a race test reliable. Without it, the test passes or fails by luck.</li>
+            <li>Making the test pass <b>when the bug is found</b> is deliberate. Right now the test's job is to show the bug. In Part 3 you'll flip it.</li>
+          </ul>
+        </details>
+        <details class="pb-steer"><summary>If the agent goes off track, steer with</summary><pre class="pb-text">The test must not depend on luck. Add a short, test-only delay inside the bid insert
+for this one auction (a BEFORE INSERT trigger with pg_sleep is fine), make sure it is
+removed in finally, and run the test three times. Show me all three results.</pre><button type="button" class="copy" data-copy="this-pre">Copy</button></details>
+      </div>
+
+      <p><b>Commands:</b></p>
+      <div class="codebox">
+        <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+        <pre><code>cd ~/code/workshop/part-2-create-auction-and-bid
+npx playwright install msedge          # first time only (WSL: add --with-deps)
+npm start                              # in one terminal
+BIDDING_WAR_HOLD_MS=60000 npm run test:bidding-war   # in another</code></pre>
+      </div>
+
+      <div class="box win"><span class="tag">Windows</span><p>In WSL, the four Edge windows open on your Windows desktop. The repo's test tiles them for a 1440×900 screen; if your screen is different, set <code>BIDDING_WAR_SCREEN_WIDTH</code> and <code>BIDDING_WAR_SCREEN_HEIGHT</code> (the reference test reads both).</p></div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li>four Edge windows in a 2×2 grid: seller top-left, bidders around it, each with a countdown;</li>
+          <li>in every bid history, <b>two accepted bids at the same amount</b> (in the repo's run, two $102s, and more duplicates in the later waves);</li>
+          <li>the post-deadline bid rejected with "This auction has ended";</li>
+          <li>the test passes and prints the duplicate amounts.</li>
+        </ul>
+        <figure class="wire">
+          <svg viewbox="0 0 700 420" role="img" aria-label="Four tiled browser windows; each bid history shows two accepted $102 bids highlighted in red" style="font-family:var(--sans)">
+            <defs>
+              <g id="p2-hist">
+                <text x="0" y="0">Chen $107</text>
+                <text class="err" x="0" y="12">Asha $107</text>
+                <text class="err" x="0" y="24">Ben $107</text>
+                <text x="0" y="36">Ben $106</text>
+                <text x="0" y="48">Chen $104</text>
+                <text x="0" y="60">Asha $103</text>
+                <text class="err" x="0" y="72">Chen $102</text>
+                <text class="err" x="0" y="84">Ben $102</text>
+                <text x="0" y="96">Asha $101</text>
+              </g>
+            </defs>
+            <rect class="bx" x="10" y="10" width="340" height="200" rx="10"></rect>
+            <text x="22" y="34" font-weight="700">SELLER · Dana</text>
+            <rect x="250" y="18" width="88" height="22" rx="6" style="fill:var(--surface-2)"></rect>
+            <text class="mut" x="262" y="33">ENDED</text>
+            <text class="price" x="22" y="66" font-size="22">$107</text>
+            <use href="#p2-hist" x="22" y="100"></use>
+            <text class="err" x="36" y="160" font-size="17" font-weight="700" transform="rotate(-10 36 160)">BUG REPRODUCED: duplicate accepted bids</text>
+            <rect class="bx" x="350" y="10" width="340" height="200" rx="10"></rect>
+            <text x="362" y="34" font-weight="700">BIDDER · Asha</text>
+            <rect x="590" y="18" width="88" height="22" rx="6" style="fill:var(--surface-2)"></rect>
+            <text x="602" y="33">T−3.2s</text>
+            <text class="price" x="362" y="66" font-size="22">$107</text>
+            <use href="#p2-hist" x="362" y="100"></use>
+            <rect class="bx" x="10" y="215" width="340" height="195" rx="10"></rect>
+            <text x="22" y="239" font-weight="700">BIDDER · Ben</text>
+            <rect x="250" y="223" width="88" height="22" rx="6" style="fill:var(--surface-2)"></rect>
+            <text x="262" y="238">T−3.2s</text>
+            <text class="price" x="22" y="270" font-size="22">$107</text>
+            <use href="#p2-hist" x="22" y="300"></use>
+            <rect class="bx" x="350" y="215" width="340" height="195" rx="10"></rect>
+            <text x="362" y="239" font-weight="700">BIDDER · Chen</text>
+            <rect x="590" y="223" width="88" height="22" rx="6" style="fill:var(--surface-2)"></rect>
+            <text x="602" y="238">T−3.2s</text>
+            <text class="price" x="362" y="270" font-size="22">$107</text>
+            <use href="#p2-hist" x="362" y="300"></use>
+          </svg>
+          <figcaption>What the race looks like. Every red pair is two people told they're winning at the same price.</figcaption>
+        </figure>
+        <div class="term" role="img" aria-label="Terminal output: the bidding war is reproduced with duplicate accepted amounts and the test passes">
+          <div class="term-bar"><i></i><i></i><i></i><span>Terminal · bidding war</span></div>
+          <pre><span class="ps">$</span> BIDDING_WAR_HOLD_MS=60000 npm run test:bidding-war
+Running 1 test using 1 worker
+
+🏁 BIDDING WAR REPRODUCED
+Auction: http://localhost:5102/items/bidding-war-gpu-…
+Duplicate accepted amounts: [ { amount_cents: 10200, accepted: 2 }, { amount_cents: 10700, accepted: 3 } ]
+Holding all four tiled Edge windows open for 60000ms…
+  1 passed</pre>
+        </div>
+        <p class="src">(The duplicate list varies run to run; at least one duplicate must appear.)</p>
+      </div>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: how the reference test makes the race reliable</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-2-create-auction-and-bid/tests/bidding-war.spec.ts</code> · lines 215–231 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-2-create-auction-and-bid/tests/bidding-war.spec.ts#L215-L231" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">bidding-war.spec.ts · lines 215–231</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="215">    await database.query(`</span>
+<span class="l" data-n="216">      CREATE OR REPLACE FUNCTION bidding_war_delay_insert() RETURNS trigger AS $$</span>
+<span class="l" data-n="217">      BEGIN</span>
+<span class="l" data-n="218">        IF EXISTS (</span>
+<span class="l" data-n="219">          SELECT 1 FROM auctions</span>
+<span class="l" data-n="220">          WHERE id = NEW.auction_id AND title LIKE 'BIDDING WAR GPU %'</span>
+<span class="l" data-n="221">        ) THEN</span>
+<span class="l hl" data-n="222">          PERFORM pg_sleep(0.8);</span>
+<span class="l" data-n="223">        END IF;</span>
+<span class="l" data-n="224">        RETURN NEW;</span>
+<span class="l" data-n="225">      END;</span>
+<span class="l" data-n="226">      $$ LANGUAGE plpgsql;</span>
+<span class="l" data-n="227">      DROP TRIGGER IF EXISTS bidding_war_delay_insert ON bids;</span>
+<span class="l" data-n="228">      CREATE TRIGGER bidding_war_delay_insert</span>
+<span class="l" data-n="229">        BEFORE INSERT ON bids</span>
+<span class="l" data-n="230">        FOR EACH ROW EXECUTE FUNCTION bidding_war_delay_insert();</span>
+<span class="l" data-n="231">    `);</span>
+</code></pre>
+          </div>
+          <p class="cr-file"><code>part-2-create-auction-and-bid/tests/bidding-war.spec.ts</code> · lines 289–298 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-2-create-auction-and-bid/tests/bidding-war.spec.ts#L289-L298" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">bidding-war.spec.ts · lines 289–298</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="289">    const duplicateResult = await database.query&lt;{ amount_cents: number; accepted: number }&gt;(</span>
+<span class="l" data-n="290">      `SELECT b.amount_cents, count(*)::int AS accepted</span>
+<span class="l" data-n="291">       FROM bids b JOIN auctions a ON a.id = b.auction_id</span>
+<span class="l" data-n="292">       WHERE a.slug = $1</span>
+<span class="l" data-n="293">       GROUP BY b.amount_cents</span>
+<span class="l hl" data-n="294">       HAVING count(*) &gt; 1</span>
+<span class="l" data-n="295">       ORDER BY b.amount_cents`,</span>
+<span class="l" data-n="296">      [slug],</span>
+<span class="l" data-n="297">    );</span>
+<span class="l" data-n="298">    expect(duplicateResult.rows.length).toBeGreaterThan(0);</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>215–231</code> A trigger that runs <b>before each insert</b> into <code>bids</code>, only for auctions titled "BIDDING WAR GPU …", and sleeps 0.8 s. Every bid request now spends almost a second between "I checked the price" and "my row exists", so simultaneous requests are sure to overlap. Production code is untouched; the test removes the trigger in <code>finally</code>.</li>
+            <li><code>289–297</code> The verdict comes from the database, not the screen: group accepted bids by amount and keep amounts that appear more than once.</li>
+            <li><code>298</code> In Part 2 the test <b>expects</b> duplicates. It passes because the bug is there.</li>
+          </ol>
+        </div>
+      </details>
+
+      <div class="box key"><span class="tag">Key lesson</span><p>At this stage a <em>passing</em> bidding-war test means <b>the bug was seen</b>. It doesn't mean bidding is safe. Always read what a test asserts before you trust its green tick.</p></div>
+
+      <div class="checkpoint" data-ck="p2:race">
+        <p class="blk">Checkpoint <span class="ck-count" aria-live="polite">0 / 5</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="sim"> <span>I stepped through the simulator in both modes</span></label></li>
+          <li><label><input type="checkbox" data-id="ask"> <span>The agent explained the race without changing code</span></label></li>
+          <li><label><input type="checkbox" data-id="war"> <span>The headed bidding war ran in four tiled Edge windows</span></label></li>
+          <li><label><input type="checkbox" data-id="dup"> <span>I saw duplicate accepted bids in the history and in the test output</span></label></li>
+          <li><label><input type="checkbox" data-id="meaning"> <span>I can explain why this test passes <em>because</em> of the bug</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk">Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/understanding-the-concurrency-problem/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Understanding the Concurrency Problem</span><span class="w-time">01:48:15 · 11 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/concurrency-playwright-tests/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Concurrency Playwright Tests</span><span class="w-time">01:59:12 · 9 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 4. PART 3 STATION ============ -->
+    <section class="sec station" id="part-3" style="--pc:var(--p3)">
+      <header class="st-head">
+        <span class="st-badge">Part 3</span>
+        <h2>Fix it with a row lock, and close on time</h2>
+        <p class="st-goal"><b>Goal</b> Only one of two simultaneous $102 bids can win, and no bid is accepted at or after 6:00 pm, even one that was waiting in line.</p>
+        <p class="st-meta"><span>Folder <code>part-3-business-rules-concurrency</code></span><span>Web :5103 · API :3103</span><span>≈ 26 min of video</span></p>
+      </header>
+
+      <p>Start Part 3 from a copy of Part 2 (same as before):</p>
+      <div class="codebox">
+        <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+        <pre><code>cd ~/code/workshop
+rsync -a --exclude node_modules --exclude test-results part-2-create-auction-and-bid/ part-3-business-rules-concurrency/
+git add -A &amp;&amp; git commit -m "Part 3: start from a copy of Part 2"</code></pre>
+      </div>
+
+      <div class="prompt-box" id="p3-prompt-plan">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Plan first</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p3-prompt-plan &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> in <code>~/code/workshop</code>. Plan mode. Effort: <b>High</b>.</p>
+        <pre class="pb-text">Part 3 of the auction site. Work only in part-3-business-rules-concurrency, which is a
+copy of part 2. First change its database to auction_part_3 and its ports to API 3103 /
+web 5103 everywhere, including the Playwright config and tests. Don't read any other
+part-N folder except part 2 for comparison.
+
+Goal: make bidding safe under concurrency and make closing time authoritative.
+1. Two simultaneous requests must never both be accepted against the same old price.
+   Every accepted bid must beat the bid accepted just before it by at least $1.
+2. A bid whose decision happens at or after the closing time is rejected, even if the
+   request arrived earlier and was waiting.
+3. When the page's view is stale and a bid is rejected, the bidder sees fresh state
+   without losing what they typed. Never raise or resubmit a bid automatically.
+4. An open auction page switches to "Ended" at the closing time by itself.
+
+Start with an audit: list what the current code already does right and what's missing,
+with file and line references. Then grill me with docs (max 2 rounds, max 10 questions
+each, each with your recommendation). Cover at least: how bid decisions are serialized,
+which clock is authoritative and how tests control it, the API error format for
+conflicts, what the page does after a conflict, and how the bidding-war test changes.
+
+Update this part's GRILL.md, propose 2 slices, and wait for "approved".</pre>
+      </div>
+
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Decisions you agree in the grilling</p>
+<div class="tw"><table class="tbl">
+<thead><tr>
+<th scope="col">Question</th>
+<th scope="col">Decision</th>
+<th scope="col">Why it matters</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Question">How are bids for one auction decided?</td><td data-label="Decision"><b>One at a time.</b> A short PostgreSQL transaction locks the auction's row first (<code>SELECT … FOR UPDATE</code>).</td><td data-label="Why it matters">Two bids on the same auction can't interleave; bids on different auctions don't block each other.</td></tr>
+<tr><td data-label="Question">When is the price read?</td><td data-label="Decision"><b>After</b> taking the lock. Re-read the highest bid inside the transaction.</td><td data-label="Why it matters">Reading before the lock is how the race happened.</td></tr>
+<tr><td data-label="Question">If $103 and $106 arrive together on a $102 price?</td><td data-label="Decision">Requests are serialized, not batched. $106 always ends up leading. $103 is kept only if it got the lock first and was valid then.</td><td data-label="Why it matters">Simple to explain and test; no "auction batching" logic.</td></tr>
+<tr><td data-label="Question">Which clock decides "closed"?</td><td data-label="Decision">The <b>application clock</b>, injected into the API so tests can set the time. Read <b>after</b> the lock.</td><td data-label="Why it matters">A bid that waited for the lock past 6:00 pm is judged at the moment of decision, not arrival.</td></tr>
+<tr><td data-label="Question">What time is stored on the bid?</td><td data-label="Decision">The same clock reading used for the decision.</td><td data-label="Why it matters">The bid's timestamp and the closing check can't disagree.</td></tr>
+<tr><td data-label="Question">What does a conflict look like?</td><td data-label="Decision">HTTP 409 with a stable <code>code</code> (<code>BID_TOO_LOW</code>, <code>AUCTION_CLOSED</code>, <code>SELLER_CANNOT_BID</code>), a readable <code>error</code>, and fresh <code>currentPriceCents</code>, <code>minimumBidCents</code>, <code>endsAt</code>.</td><td data-label="Why it matters">The page can react by code, not by parsing English.</td></tr>
+<tr><td data-label="Question">What does the page do after a conflict?</td><td data-label="Decision">Refresh the whole auction, <b>keep the typed amount</b>, never resubmit. Retry the refresh if it fails; never retry the bid.</td><td data-label="Why it matters">The bidder decides what to do next. Money is never spent automatically.</td></tr>
+<tr><td data-label="Question">How does an open page know it ended?</td><td data-label="Decision">Schedule a local switch to "Ended" at <code>endsAt</code>; recheck when the tab becomes visible again. No polling. The API stays authoritative.</td><td data-label="Why it matters">Background tabs pause timers, so the visibility recheck matters.</td></tr>
+<tr><td data-label="Question">Idempotency keys for bid requests?</td><td data-label="Decision">Out of scope.</td><td data-label="Why it matters">Keeps the design small. Written down so it's a choice, not an oversight.</td></tr>
+<tr><td data-label="Question">How is it verified?</td><td data-label="Decision">Deterministic concurrency tests in the API, clock-boundary tests, page tests for conflicts and the timer, and the bidding-war test <b>flipped</b> to demand protection.</td><td data-label="Why it matters">Same test, opposite assertion: it now proves the bug is gone.</td></tr>
+</tbody>
+</table></div>
+        <p class="src">Source: <code>part-3-business-rules-concurrency/GRILL.md</code>, both rounds.</p>
+      </div>
+
+      <!-- ===== Slice 1 ===== -->
+      <h3 id="p3-slice1">Slice 1: the lock</h3>
+      <div class="prompt-box" id="p3-prompt-s1">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p3-prompt-s1 &gt; .pb-text">Copy</button>
+        </div>
+        <pre class="pb-text">Approved. Build Slice 1 only: concurrent bidding and stale-bid recovery.
+
+API (part 3 only):
+- Place each bid in one short transaction on a dedicated client: BEGIN, lock the auction
+  row with SELECT ... FOR UPDATE, then read the current highest bid, validate seller and
+  minimum, INSERT, COMMIT. ROLLBACK on every early return and on errors; always release
+  the client.
+- Conflicts: 409 with code, error, currentPriceCents, minimumBidCents and endsAt.
+Web:
+- On a 409, refresh the whole auction, keep the amount the user typed, show the error,
+  and never resubmit.
+
+Tests:
+- A deterministic API test: create an auction, add a test-only insert delay, fire three
+  equal bids at once, and assert exactly one 201 and two 409 BID_TOO_LOW with the right
+  minimum. Also assert the accepted history is strictly increasing by at least 100 cents.
+- Flip tests/bidding-war.spec.ts: it must now FAIL if any duplicate accepted amount
+  exists, and pass only when every accepted bid beats the previous one by $1. Keep the
+  same windows and timeline. Update the base URL and database to part 3.
+
+Run npm test, tsc --noEmit for server and web, and the headed bidding war. Show me the
+accepted bid history from the bidding war, then stop.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><p>It spells out the transaction's shape (where the lock goes, where the read goes, what happens on every exit path) because "add a lock" alone often produces a lock in the wrong place, or a client that's never released. And it reuses the bidding-war test with the assertion reversed, so the same scenario that showed the bug now proves the fix.</p></details>
+        <details class="pb-steer"><summary>If the agent goes off track, steer with</summary><pre class="pb-text">The price must be read after the lock, inside the same transaction, on the same client.
+Show me the exact order of statements in the bid handler as a numbered list, then fix
+anything that reads before FOR UPDATE or uses the pool instead of the transaction client.</pre><button type="button" class="copy" data-copy="this-pre">Copy</button></details>
+      </div>
+
+      <p><b>Sequence diagram</b></p>
+      <figure class="diagram">
+        <svg viewbox="0 0 760 360" role="img" aria-label="Sequence: Ben's transaction locks the auction row; Chen's waits; after Ben commits, Chen re-reads $102 and is rejected" style="fill:var(--ink);font-family:var(--sans)">
+          <defs><marker id="arrowhead2" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" style="color:var(--ink)"></path></marker></defs>
+          <!-- lifeline heads -->
+          <rect x="50" y="14" width="120" height="30" rx="8" style="fill:var(--surface);stroke:var(--note)" stroke-width="2"></rect>
+          <text x="110" y="34" text-anchor="middle" font-size="13" font-weight="700" style="fill:var(--note)">Ben's request</text>
+          <rect x="340" y="14" width="120" height="30" rx="8" style="fill:var(--surface);stroke:var(--accent)" stroke-width="2"></rect>
+          <text x="400" y="34" text-anchor="middle" font-size="13" font-weight="700">PostgreSQL</text>
+          <rect x="590" y="14" width="120" height="30" rx="8" style="fill:var(--surface);stroke:var(--violet)" stroke-width="2"></rect>
+          <text x="650" y="34" text-anchor="middle" font-size="13" font-weight="700" style="fill:var(--violet)">Chen's request</text>
+          <!-- lifelines -->
+          <line x1="110" y1="44" x2="110" y2="346" style="stroke:var(--line)" stroke-width="2" stroke-dasharray="5 4"></line>
+          <line x1="400" y1="44" x2="400" y2="346" style="stroke:var(--line)" stroke-width="2" stroke-dasharray="5 4"></line>
+          <line x1="650" y1="44" x2="650" y2="346" style="stroke:var(--line)" stroke-width="2" stroke-dasharray="5 4"></line>
+          <!-- 1 BEGIN -->
+          <path d="M110 74 H400" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead2)"></path>
+          <text x="255" y="68" text-anchor="middle" font-size="12" style="font-family:var(--mono)">BEGIN</text>
+          <!-- 2 SELECT FOR UPDATE, lock on PG -->
+          <path d="M110 104 H400" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead2)"></path>
+          <text x="255" y="92" text-anchor="middle" font-size="11" style="font-family:var(--mono)">SELECT … FROM auctions</text>
+          <text x="255" y="122" text-anchor="middle" font-size="11" style="font-family:var(--mono)">WHERE slug = 'used-gpu' FOR UPDATE</text>
+          <rect x="410" y="132" width="150" height="20" rx="5" style="fill:var(--bid-soft);stroke:var(--bid)"></rect>
+          <text x="418" y="146" font-size="11" font-weight="700" style="fill:var(--bid)">🔒 row lock: Ben</text>
+          <!-- 3 Chen BEGIN -->
+          <path d="M650 166 H400" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead2)"></path>
+          <text x="525" y="160" text-anchor="middle" font-size="12" style="font-family:var(--mono)">BEGIN</text>
+          <!-- 4 Chen SELECT FOR UPDATE, waits -->
+          <path d="M650 190 H400" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead2)"></path>
+          <text x="525" y="184" text-anchor="middle" font-size="11" style="font-family:var(--mono)">SELECT … FOR UPDATE</text>
+          <rect x="644" y="198" width="12" height="46" rx="3" style="fill:var(--warn-soft);stroke:var(--warn)" stroke-dasharray="4 3"></rect>
+          <text x="630" y="226" text-anchor="end" font-size="12" font-weight="700" style="fill:var(--warn)">waiting…</text>
+          <!-- 5 Ben reads -->
+          <path d="M110 256 H400" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead2)"></path>
+          <text x="255" y="250" text-anchor="middle" font-size="11" style="font-family:var(--mono)">SELECT max(amount_cents) → 10100</text>
+          <!-- 6 Ben inserts -->
+          <path d="M110 276 H400" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead2)"></path>
+          <text x="255" y="270" text-anchor="middle" font-size="11" style="font-family:var(--mono)">INSERT bid 10200</text>
+          <!-- 7 Ben commits, lock moves -->
+          <path d="M110 296 H400" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead2)"></path>
+          <text x="255" y="290" text-anchor="middle" font-size="11" style="font-family:var(--mono)">COMMIT → lock moves to Chen</text>
+          <!-- 8 Chen reads -->
+          <path d="M650 316 H400" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead2)"></path>
+          <text x="525" y="310" text-anchor="middle" font-size="11" style="font-family:var(--mono)">SELECT max(amount_cents) → 10200</text>
+          <!-- 9 Chen rejected -->
+          <text x="640" y="334" text-anchor="end" font-size="11" style="font-family:var(--mono)">10200 &lt; 10300 ✗ → ROLLBACK</text>
+          <text x="640" y="350" text-anchor="end" font-size="12" font-weight="700" style="fill:var(--bad)">409 BID_TOO_LOW, minimum $103</text>
+        </svg>
+        <figcaption>BEGIN → lock → read → validate → insert → commit. The second request can't read until the first one is finished.</figcaption>
+      </figure>
+
+      <!-- View code (three dropdowns) -->
+      <details class="solution-reveal code-reveal">
+        <summary>View code: the lock and the re-read</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-3-business-rules-concurrency/server/src/app.ts</code> · lines 269–295 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-3-business-rules-concurrency/server/src/app.ts#L269-L295" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">app.ts · lines 269–295</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="269">      await client.query('BEGIN');</span>
+<span class="l" data-n="270">      const auctionResult = await client.query&lt;{</span>
+<span class="l" data-n="271">        id: string;</span>
+<span class="l" data-n="272">        seller_user_id: number;</span>
+<span class="l" data-n="273">        ends_at: Date;</span>
+<span class="l" data-n="274">        starting_price_cents: number;</span>
+<span class="l" data-n="275">      }&gt;(</span>
+<span class="l" data-n="276">        `SELECT id::text, seller_user_id, ends_at, starting_price_cents</span>
+<span class="l" data-n="277">         FROM auctions</span>
+<span class="l" data-n="278">         WHERE slug = $1</span>
+<span class="l hl" data-n="279">         FOR UPDATE`,</span>
+<span class="l" data-n="280">        [params.data.slug],</span>
+<span class="l" data-n="281">      );</span>
+<span class="l" data-n="282">      const auction = auctionResult.rows[0];</span>
+<span class="l" data-n="283">      if (!auction) {</span>
+<span class="l" data-n="284">        await client.query('ROLLBACK');</span>
+<span class="l" data-n="285">        return reply.code(404).send({ error: 'Auction not found' });</span>
+<span class="l" data-n="286">      }</span>
+<span class="l" data-n="287"></span>
+<span class="l hl" data-n="288">      const currentResult = await client.query&lt;{ current_price_cents: number }&gt;(</span>
+<span class="l hl" data-n="289">        `SELECT COALESCE(max(amount_cents), $2)::int AS current_price_cents</span>
+<span class="l hl" data-n="290">         FROM bids</span>
+<span class="l hl" data-n="291">         WHERE auction_id = $1`,</span>
+<span class="l hl" data-n="292">        [auction.id, auction.starting_price_cents],</span>
+<span class="l hl" data-n="293">      );</span>
+<span class="l" data-n="294">      const currentPriceCents = currentResult.rows[0].current_price_cents;</span>
+<span class="l" data-n="295">      const minimumBidCents = currentPriceCents + 100;</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>269</code> <code>BEGIN</code>, on a dedicated client taken from the pool two lines earlier (<code>pool.connect()</code> at line 267). Every statement after this runs on that one connection, inside one transaction. (Using <code>pool.query</code> here would send statements to <em>different</em> connections, outside the transaction.)</li>
+            <li><code>276–279</code> <code>FOR UPDATE</code> locks the auction's row until the transaction ends. A second bid on the same auction stops at this line and waits. Bids on other auctions aren't affected.</li>
+            <li><code>288–294</code> Only now, holding the lock, does it read the highest bid. Because PostgreSQL's default isolation level (<em>Read Committed</em>) gives each statement a fresh view, this read sees any bid committed while we were waiting.</li>
+            <li><code>295</code> The minimum is computed from that fresh price.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: the clock, checked after the lock</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-3-business-rules-concurrency/server/src/app.ts</code> · lines 310–318 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-3-business-rules-concurrency/server/src/app.ts#L310-L318" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">app.ts · lines 310–318</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l hl" data-n="310">      const acceptedAt = clock.now();</span>
+<span class="l hl" data-n="311">      if (auction.ends_at.getTime() &lt;= acceptedAt.getTime()) {</span>
+<span class="l" data-n="312">        await client.query('ROLLBACK');</span>
+<span class="l" data-n="313">        return reply.code(409).send({</span>
+<span class="l" data-n="314">          code: 'AUCTION_CLOSED',</span>
+<span class="l" data-n="315">          error: 'This auction has ended',</span>
+<span class="l" data-n="316">          ...conflictDetails,</span>
+<span class="l" data-n="317">        });</span>
+<span class="l" data-n="318">      }</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>310</code> The time is read <b>after</b> the lock is held, from the injected clock. If Chen's request arrived at 5:59:59.9 and waited a second for the lock, the decision time is 6:00:00.9, and it's rejected.</li>
+            <li><code>311</code> "At or after" the deadline (<code>&lt;=</code>) is closed. A bid at exactly 6:00:00.000 loses.</li>
+            <li><code>312–317</code> Every early exit rolls back, so the lock is released at once. The <code>code</code> lets the page show "This auction has ended" and switch to the ended view.</li>
+            <li>Later (lines 328–333, not shown) the same <code>acceptedAt</code> is stored as the bid's <code>created_at</code>, so the stored time and the decision always agree.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: how the clock is injected</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-3-business-rules-concurrency/server/src/app.ts</code> · lines 126–134 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-3-business-rules-concurrency/server/src/app.ts#L126-L134" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">app.ts · lines 126–134</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l hl" data-n="126">export type Clock = {</span>
+<span class="l hl" data-n="127">  now(): Date;</span>
+<span class="l hl" data-n="128">};</span>
+<span class="l" data-n="129"></span>
+<span class="l" data-n="130">const systemClock: Clock = {</span>
+<span class="l" data-n="131">  now: () =&gt; new Date(),</span>
+<span class="l" data-n="132">};</span>
+<span class="l" data-n="133"></span>
+<span class="l hl" data-n="134">export function buildApp({ clock = systemClock }: { clock?: Clock } = {}) {</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>126–128</code> A <code>Clock</code> is anything with a <code>now()</code> method. That's the whole interface.</li>
+            <li><code>130–132</code> In production it's the real clock.</li>
+            <li><code>134</code> <code>buildApp</code> accepts an optional clock. Tests pass a fake one with a fixed time, so "a bid exactly at the deadline" is a test that runs in milliseconds and gives the same answer every time.</li>
+          </ol>
+        </div>
+      </details>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see (Slice 1)</p>
+        <ul class="see-list">
+          <li><code>npm test</code> green, including the three-equal-bids test: exactly one 201, two 409s;</li>
+          <li>the headed bidding war passes <b>because there are no duplicates</b>; the repo's run accepted <code>$101, $102, $106, $107</code>;</li>
+          <li>in the window whose $102 lost, the price refreshes to $102, the guidance says "Minimum bid $103", and the box still says <code>102.00</code>.</li>
+        </ul>
+        <div class="term" role="img" aria-label="Terminal output: the headed bidding war passes with no duplicates">
+          <div class="term-bar"><i></i><i></i><i></i><span>Terminal · bidding war, Part 3</span></div>
+          <pre><span class="ps">$</span> npm run test:bidding-war
+Running 1 test using 1 worker
+  ✓ Bidding War: four visible users are protected from simultaneous-bid races
+  1 passed</pre>
+        </div>
+      </div>
+
+      <p><b>Commit:</b> <code>git add -A &amp;&amp; git commit -m "Part 3 slice 1: row lock, typed conflicts, protection test"</code></p>
+
+      <!-- ===== Slice 2 ===== -->
+      <h3 id="p3-slice2">Slice 2: closing on time</h3>
+      <div class="prompt-box" id="p3-prompt-s2">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p3-prompt-s2 &gt; .pb-text">Copy</button>
+        </div>
+        <pre class="pb-text">Slice 1 is approved. Build Slice 2 only: authoritative closing and the live "Ended" switch.
+
+API:
+- Inject the app clock into buildApp (default: the real clock). Read it after the
+  auction lock is held, reject at or after endsAt with 409 AUCTION_CLOSED, and store the
+  same reading as the accepted bid's createdAt.
+Tests with a fake clock:
+- one millisecond before the deadline: accepted;
+- exactly at the deadline: rejected;
+- after the deadline: rejected;
+- a bid that was waiting for the lock while the clock passed the deadline: rejected.
+Web:
+- The detail page schedules a switch to "Ended" at endsAt, disables the bid button and
+  shows "Bidding has ended."; it recomputes when a background tab becomes visible
+  again. No polling. Test the timer with a fake environment.
+- Extend the headed bidding war: every bidder window shows "Ended" and a disabled
+  button before the post-deadline API attempts, which must return AUCTION_CLOSED.
+
+Run all tests, both type checks and the headed bidding war, then stop.</pre>
+      </div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li>four clock-boundary API tests pass, including the "waited for the lock past the deadline" case;</li>
+          <li>leave an auction page open: at the deadline it switches to <i>Ended</i> by itself and the button is disabled;</li>
+          <li>background the tab past the deadline and come back: it shows <i>Ended</i> straight away;</li>
+          <li>the headed war ends with every bidder window on <i>Ended</i>, and the late $108 attempts rejected with <code>AUCTION_CLOSED</code>.</li>
+        </ul>
+      </div>
+
+      <div class="box note"><span class="tag">Why the visibility check?</span><p>Browsers slow down or pause timers in background tabs to save battery. A timer set for 6:00 pm might fire late. Rechecking on <code>visibilitychange</code> means a tab you come back to is right immediately. The server doesn't rely on any of this: it still rejects late bids itself.</p></div>
+
+      <div class="box stretch"><span class="tag">Stretch exercise</span><p>Ask the agent: "What happens if two bids arrive for <i>different</i> auctions at the same moment?" (They don't block each other: the lock is per auction row.) Then ask it to prove it with a test.</p></div>
+
+      <div class="checkpoint" data-ck="p2:part-3">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 6</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="copy"> <span>Part 3 runs on 3103/5103 with <code>auction_part_3</code></span></label></li>
+          <li><label><input type="checkbox" data-id="lock"> <span>The price is read after <code>FOR UPDATE</code>, inside the transaction</span></label></li>
+          <li><label><input type="checkbox" data-id="three"> <span>The three-equal-bids test gives one 201 and two 409s</span></label></li>
+          <li><label><input type="checkbox" data-id="flip"> <span>The headed bidding war now passes with no duplicates</span></label></li>
+          <li><label><input type="checkbox" data-id="clock"> <span>Clock-boundary tests pass, including "waited past the deadline"</span></label></li>
+          <li><label><input type="checkbox" data-id="ended"> <span>An open page switches to Ended by itself</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/create-plan-for-fixing-concurrency/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Create Plan for Fixing Concurrency</span><span class="w-time">02:08:41 · 12 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/row-locking-in-postgresql/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Row Locking in PostgreSQL</span><span class="w-time">02:21:01 · 7 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/closing-the-auction/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Closing the Auction</span><span class="w-time">02:28:10 · 7 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+
+      <!-- ===== Transactions vs locks (side explainer, still in Part 3) ===== -->
+      <p class="eyebrow">Side explainer</p>
+      <h3 id="isolation">Transactions vs locks</h3>
+      <p>A common belief: "just wrap it in a transaction". A transaction makes a group of statements all-or-nothing. It does <b>not</b>, by itself, stop two transactions reading the same old value. Here's our race under four setups:</p>
+<div class="tw"><table class="tbl">
+<thead><tr>
+<th scope="col">Setup</th>
+<th scope="col">What Ben and Chen read</th>
+<th scope="col">Result</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Setup">No transaction (Part 2)</td><td data-label="What Ben and Chen read">Both read $101</td><td data-label="Result">✗ Two accepted $102 bids</td></tr>
+<tr><td data-label="Setup">Transaction, default isolation (<em>Read Committed</em>), no lock</td><td data-label="What Ben and Chen read">Both read $101: neither sees the other's uncommitted insert</td><td data-label="Result">✗ Still two $102 bids</td></tr>
+<tr><td data-label="Setup">Read Committed <b>+ <code>SELECT … FOR UPDATE</code></b> on the auction row (Part 3)</td><td data-label="What Ben and Chen read">Ben reads $101. Chen waits for the lock, then reads $102, because each statement sees what was committed before it started</td><td data-label="Result">✓ Chen rejected, minimum $103</td></tr>
+<tr><td data-label="Setup"><em>Repeatable Read</em> + <code>FOR UPDATE</code></td><td data-label="What Ben and Chen read">Chen waits, gets the lock, but its reads use a snapshot from the start of its transaction, so it may still see $101</td><td data-label="Result">✗ Can still duplicate: this design relies on Read Committed</td></tr>
+</tbody>
+</table></div>
+      <p>PostgreSQL's default is Read Committed, which is what the course code uses. The strictest level, <em>Serializable</em>, would instead abort one of the two transactions with a "could not serialize" error, and the API would have to retry it. The row lock is simpler: requests queue per auction and nobody needs a retry.</p>
+
+      <div class="box note"><span class="tag">Our analysis</span><p>The Repeatable Read row is our own reasoning about PostgreSQL's rules, not something shown in the course. Ask your agent to prove or disprove it with a test: it makes a good review exercise.</p></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 5. REVIEW THE AI'S CODE ============ -->
+    <section class="sec" id="review">
+      <p class="eyebrow">Second pair of eyes</p>
+      <h2>Review the AI's code</h2>
+
+      <p>You didn't write the Part 3 code, so you need a way to trust it that doesn't depend on reading every line. The course uses a <b>code review by an agent</b>, ideally a different model or a fresh chat, asked to find real problems and to show its evidence.</p>
+
+      <div class="prompt-box" id="p2-prompt-review">
+        <div class="pb-head">
+          <span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Review only</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p2-prompt-review &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> (don't reuse the chat that wrote Part 3). Repo root. Effort: <b>High</b>.</p>
+        <pre class="pb-text">Review the last commits in this repo, which implement part-3-business-rules-concurrency
+(compare with part-2-create-auction-and-bid to see what changed). Don't edit any files.
+
+Look for real problems only:
+- correctness bugs in bidding, including every early-return and error path,
+- concurrency problems: anything read outside the transaction or before the lock,
+  connections not released, locks held longer than needed,
+- deadline edge cases: exactly at endsAt, a request that waits for the lock past
+  endsAt, clock and timezone handling,
+- missing or weak tests: a test that would still pass if the fix were removed.
+
+For each finding give: severity (high/medium/low), a concrete failure scenario with
+names and amounts, the file and line numbers, and how you'd confirm it (a test or a
+command). If something looks fine, say so in one line. No style comments.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><p>It asks for <em>scenarios and evidence</em>, not opinions. "A test that would still pass if the fix were removed" is the sharpest question you can ask about tests. And excluding style comments keeps a review from drowning in nitpicks.</p></details>
+      </div>
+
+      <div class="cards3">
+        <div class="card">
+          <b>✓ A passing test</b>
+          <p>Shows the code does what the test checks. Nothing more. Read the assertion: Part 2's bidding war passed <i>because of</i> the bug.</p>
+        </div>
+        <div class="card">
+          <b>🔎 A review finding</b>
+          <p>A claim that something might be wrong. Useful, but unproven until it comes with a failing test or a reproduction.</p>
+        </div>
+        <div class="card">
+          <b>💥 A demonstrated defect</b>
+          <p>A failing test, a log line or a bidding-war run that shows the bug happening. This is what you fix, and what proves the fix.</p>
+        </div>
+      </div>
+
+      <p>Treat review findings as leads. For each one that matters, ask: "Write a test that fails because of this, run it, and show me." If it can't, it's probably not real. Then fix it in a separate message, and keep the test.</p>
+
+      <p><b>Optional: a second opinion.</b> Paste the same prompt into a different agent (if the code was written by Codex, review it with Claude Code, or the other way round), then compare. Agreement raises confidence; a finding only one of them spots deserves a test.</p>
+
+      <div class="box note"><span class="tag">From the course</span><p>In the video the instructor reviews with Codex and with Claude, and compares what each found. The point isn't which tool "wins"; it's that two independent reviewers catch more than one.</p></div>
+
+      <div class="checkpoint" data-ck="p2:review">
+        <p class="blk">Checkpoint <span class="ck-count" aria-live="polite">0 / 4</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="review"> <span>I ran a review-only prompt in a fresh chat</span></label></li>
+          <li><label><input type="checkbox" data-id="scenario"> <span>Every finding I kept has a concrete scenario and line numbers</span></label></li>
+          <li><label><input type="checkbox" data-id="proved"> <span>For at least one finding, I asked for a failing test before any fix</span></label></li>
+          <li><label><input type="checkbox" data-id="second"> <span>(Optional) I compared with a second agent's review</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk">Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/code-reviews-with-codex-claude/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Code Reviews with Codex &amp; Claude</span><span class="w-time">02:34:45 · 6 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 6. PART 4 STATION ============ -->
+    <section class="sec station" id="part-4" style="--pc:var(--p4)">
+      <header class="st-head">
+        <span class="st-badge">Part 4</span>
+        <h2>Live updates with Socket.IO and Redis</h2>
+        <p class="st-goal"><b>Goal</b> When Chen bids, Asha's and Ben's open pages update within a second, without a reload, even with several API servers.</p>
+        <p class="st-meta"><span>Folder <code>part-4-realtime-socketio-redis</code></span><span>Web :5104 · API :3104 · Redis :56379</span><span>≈ 28 min of video</span></p>
+      </header>
+
+      <p>Until now, a page only learns about new bids when you reload it. In the last seconds of an auction that's useless. Part 4 makes pages <b>live</b>.</p>
+
+      <p>Two new pieces:</p>
+      <ul>
+        <li><b>Socket.IO</b>: a library that keeps an open connection between each browser and the API (a <i>WebSocket</i>), so the server can push messages without the browser asking.</li>
+        <li><b>Redis</b>: a fast in-memory data store. Here it's used only as a <b>backplane</b>: if you run two or three copies of the API behind a load balancer, a bid handled by API copy 1 must reach a browser connected to API copy 2. Each copy publishes events to Redis and hears everyone else's.</li>
+      </ul>
+
+      <p>The design choice that makes this simple: the live event carries <b>no price</b>. It just says "auction <code>used-gpu</code> changed". Each page then re-fetches the auction over normal HTTP. The database stays the only source of truth, and a missed or duplicated event can't put a wrong number on screen.</p>
+
+      <figure class="diagram">
+        <svg viewbox="0 0 760 260" role="img" aria-label="Chen's bid commits; the API publishes auction:changed through Redis to every API copy; browsers watching that auction re-fetch it over HTTP" style="fill:var(--ink);font-family:var(--sans)">
+          <defs><marker id="arrowhead4" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" style="color:var(--ink)"></path></marker></defs>
+          <!-- top row: Chen -> API copy 1 -> PostgreSQL -->
+          <rect x="20" y="30" width="150" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="95" y="52" text-anchor="middle" font-size="13" font-weight="700">🌐 Chen's browser</text>
+          <text x="95" y="70" text-anchor="middle" font-size="11" style="fill:var(--muted)">POST bid</text>
+          <rect x="250" y="30" width="150" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="325" y="52" text-anchor="middle" font-size="13" font-weight="700">⚡ API copy 1</text>
+          <text x="325" y="70" text-anchor="middle" font-size="11" style="fill:var(--muted)">Fastify + Socket.IO</text>
+          <rect x="480" y="30" width="150" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="555" y="52" text-anchor="middle" font-size="13" font-weight="700">🐘 PostgreSQL</text>
+          <text x="555" y="70" text-anchor="middle" font-size="11" style="fill:var(--muted)">source of truth</text>
+          <path d="M170 55 H250" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead4)"></path>
+          <text x="210" y="48" text-anchor="middle" font-size="11">POST bid</text>
+          <path d="M400 55 H480" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead4)"></path>
+          <text x="440" y="48" text-anchor="middle" font-size="11">COMMIT</text>
+          <!-- middle row: Redis, API copy 2 -->
+          <rect x="250" y="120" width="150" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="325" y="142" text-anchor="middle" font-size="13" font-weight="700">🔴 Redis</text>
+          <text x="325" y="160" text-anchor="middle" font-size="11" style="fill:var(--muted)">pub/sub backplane</text>
+          <rect x="480" y="120" width="150" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="555" y="142" text-anchor="middle" font-size="13" font-weight="700">⚡ API copy 2</text>
+          <text x="555" y="160" text-anchor="middle" font-size="11" style="fill:var(--muted)">same code, another copy</text>
+          <path d="M325 80 V120" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead4)"></path>
+          <text x="335" y="104" font-size="11">after commit: auction:changed { slug, bidId }</text>
+          <path d="M400 145 H480" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead4)"></path>
+          <text x="440" y="138" text-anchor="middle" font-size="11">fan out</text>
+          <!-- bottom row: pages -->
+          <rect x="20" y="200" width="150" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="95" y="222" text-anchor="middle" font-size="13" font-weight="700">🌐 Asha's page</text>
+          <text x="95" y="240" text-anchor="middle" font-size="11" style="fill:var(--muted)">watches auction:used-gpu</text>
+          <rect x="400" y="200" width="150" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="475" y="222" text-anchor="middle" font-size="13" font-weight="700">🌐 Ben's page</text>
+          <text x="475" y="240" text-anchor="middle" font-size="11" style="fill:var(--muted)">watches auction:used-gpu</text>
+          <path d="M290 80 L180 200" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead4)"></path>
+          <text x="200" y="146" font-size="11">🔌 room auction:used-gpu</text>
+          <path d="M520 170 L490 200" stroke="currentColor" style="color:var(--ink)" stroke-width="1.5" fill="none" marker-end="url(#arrowhead4)"></path>
+          <text x="560" y="192" font-size="11">🔌 room</text>
+        </svg>
+        <figcaption>The event is a doorbell, not a parcel: it says 'something changed', and each page fetches the real state.</figcaption>
+      </figure>
+
+      <p>Start Part 4 from Part 3:</p>
+      <div class="codebox">
+        <div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div>
+        <pre><code>cd ~/code/workshop
+rsync -a --exclude node_modules --exclude test-results part-3-business-rules-concurrency/ part-4-realtime-socketio-redis/
+git add -A &amp;&amp; git commit -m "Part 4: start from a copy of Part 3"</code></pre>
+      </div>
+
+      <div class="prompt-box" id="p4-prompt-plan">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Plan first</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p4-prompt-plan &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> in <code>~/code/workshop</code>. Plan mode. Effort: <b>High</b>.</p>
+        <pre class="pb-text">Part 4 of the auction site. Work only in part-4-realtime-socketio-redis, a copy of part 3.
+First switch it to database auction_part_4 and ports API 3104 / web 5104 everywhere,
+including Playwright config and tests.
+
+Goal: an open auction detail page updates by itself within about a second when someone
+else's bid is accepted, using Socket.IO with Redis as the backplane so it keeps working
+when the API runs as several copies. Use the Redis service in the root docker-compose.yml
+(host port 56379) and add a script that starts it before the API.
+
+Constraints:
+- Bids still go through the existing HTTP endpoint and its transaction. The socket
+  channel is read-only and never decides anything.
+- PostgreSQL stays the source of truth. If Redis is down, bids must still be accepted.
+- Don't add connection-status UI.
+
+Grill me with docs, max 2 rounds of up to 10 questions, each with your recommendation.
+Cover at least: which pages are live, what the event contains, when it is sent relative
+to COMMIT, how a page recovers after a dropped connection, how the bidder's own page
+behaves, startup order with Redis, and what tests prove it. Write this part's GRILL.md
+and a CONTEXT.md glossary of the key terms, propose 2 slices, and wait for "approved".</pre>
+      </div>
+
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Decisions you agree in the grilling</p>
+<div class="tw"><table class="tbl">
+<thead><tr>
+<th scope="col">Question</th>
+<th scope="col">Decision</th>
+<th scope="col">Why it matters</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Question">Which pages go live?</td><td data-label="Decision"><b>Auction detail pages only.</b> Home and search stay snapshots.</td><td data-label="Why it matters">Small scope; the detail page is where bidding happens.</td></tr>
+<tr><td data-label="Question">What does "live" promise?</td><td data-label="Decision">An open detail page normally updates within ~1 s of another bidder's accepted bid, and always converges to the database state without a reload.</td><td data-label="Why it matters">A measurable target the test can check.</td></tr>
+<tr><td data-label="Question">What's the event?</td><td data-label="Decision"><code>auction:changed</code> with <code>{ slug, bidId }</code>: an <b>invalidation signal</b>, not a copy of the auction.</td><td data-label="Why it matters">No second source of truth; the page re-fetches over HTTP.</td></tr>
+<tr><td data-label="Question">When is it sent?</td><td data-label="Decision"><b>Only after COMMIT.</b> Rejections and rollbacks send nothing.</td><td data-label="Why it matters">A page never re-fetches a bid that doesn't exist.</td></tr>
+<tr><td data-label="Question">Who receives it?</td><td data-label="Decision">Everyone watching that auction joins a public room <code>auction:&lt;slug&gt;</code>, including the bidder who placed it. The page <b>coalesces</b> overlapping refreshes.</td><td data-label="Why it matters">One code path for everyone; no flood of requests.</td></tr>
+<tr><td data-label="Question">Transport?</td><td data-label="Decision">WebSocket only, no long-polling fallback.</td><td data-label="Why it matters">Avoids sticky-session load balancer setup.</td></tr>
+<tr><td data-label="Question">Several API copies?</td><td data-label="Decision">Socket.IO's standard Redis adapter (pub/sub). Multi-region and high-availability Redis are out of scope.</td><td data-label="Why it matters">Each copy hears the others' events through Redis.</td></tr>
+<tr><td data-label="Question">If Redis is down?</td><td data-label="Decision">Bids are still accepted; only live updates degrade. Redis must be connected <b>before</b> the API starts listening.</td><td data-label="Why it matters">The database is the authority; realtime is a convenience.</td></tr>
+<tr><td data-label="Question">After a dropped connection?</td><td data-label="Decision">Redis pub/sub doesn't replay missed events, so the page <b>re-fetches the whole auction after every reconnect</b>.</td><td data-label="Why it matters">Converges even if events were missed. (See the repo note: this one wasn't built.)</td></tr>
+<tr><td data-label="Question">If a background refresh fails?</td><td data-label="Decision">Keep the last good view; a later event or reconnect tries again. No status UI.</td><td data-label="Why it matters">No flicker, no spinner spam.</td></tr>
+</tbody>
+</table></div>
+        <p class="src">Source: <code>part-4-realtime-socketio-redis/GRILL.md</code>, both rounds.</p>
+      </div>
+
+      <!-- ===== Slice 1 ===== -->
+      <p><b>Prompt box: Slice 1</b></p>
+      <div class="prompt-box" id="p4-prompt-s1">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt to try</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p4-prompt-s1 &gt; .pb-text">Copy</button>
+        </div>
+        <pre class="pb-text">Approved. Build Slice 1: live auction detail updates.
+
+- Redis starts with the app (an npm script using the root docker-compose.yml), and the
+  API connects its Redis clients before it starts listening.
+- Attach Socket.IO with the Redis adapter to the Fastify server, WebSocket transport only.
+- A client event to watch one auction: validate the slug with Zod, join room
+  auction:&lt;slug&gt;, acknowledge.
+- In the bid handler, after COMMIT succeeds, publish auction:changed { slug, bidId } to
+  that room. A publish failure is logged and never fails the bid.
+- The detail page joins the room on mount and leaves on unmount or slug change; on each
+  event it re-fetches the auction, coalescing overlapping refreshes (at most one
+  in flight plus one trailing).
+
+Tests: rejected bids publish nothing; accepted bids publish after commit; rooms are
+isolated; malformed watch requests are rejected; the coalescer never runs two refreshes
+at once. Add a Playwright test with two browser contexts on one auction: a bid in one
+updates price, bidder, count, minimum and history in the other with no reload.
+
+Then rerun the bidding war with every page reload removed from it: pages must stay
+current from live updates alone. Run all tests and type checks, then stop.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><p>"After COMMIT" and "a publish failure never fails the bid" are the two lines that keep the realtime layer from corrupting the bidding layer. The coalescing requirement is specific ("one in flight plus one trailing") so you can check the test against it. And re-running the bidding war without reloads turns your existing big test into a realtime test for free.</p></details>
+        <details class="pb-steer"><summary>If the agent goes off track, steer with</summary><pre class="pb-text">The socket event must not carry prices or bid lists. Send only { slug, bidId }, and make
+the page re-fetch the auction over HTTP when it arrives. Move the publish so it happens
+after COMMIT returns, and show me a test where a rejected bid publishes nothing.</pre><button type="button" class="copy" data-copy="this-pre">Copy</button></details>
+      </div>
+
+      <!-- View code (five dropdowns) -->
+      <details class="solution-reveal code-reveal">
+        <summary>View code: joining an auction room</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-4-realtime-socketio-redis/server/src/realtime.ts</code> · lines 50–59 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-4-realtime-socketio-redis/server/src/realtime.ts#L50-L59" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">realtime.ts · lines 50–59</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="50">  io.on('connection', (socket) =&gt; {</span>
+<span class="l" data-n="51">    socket.on('auction:watch', (payload, acknowledge) =&gt; {</span>
+<span class="l hl" data-n="52">      const parsed = auctionSubscriptionSchema.safeParse(payload);</span>
+<span class="l" data-n="53">      if (!parsed.success) {</span>
+<span class="l" data-n="54">        acknowledge({ ok: false, error: 'Invalid auction subscription' });</span>
+<span class="l" data-n="55">        return;</span>
+<span class="l" data-n="56">      }</span>
+<span class="l hl" data-n="57">      socket.join(auctionRoom(parsed.data.slug));</span>
+<span class="l" data-n="58">      acknowledge({ ok: true });</span>
+<span class="l" data-n="59">    });</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>51–56</code> The browser asks to watch an auction; the slug is validated with Zod (same pattern as the REST routes), and bad input is refused with an acknowledgement, not a crash.</li>
+            <li><code>57</code> The socket joins the room <code>auction:&lt;slug&gt;</code>. Rooms are how Socket.IO sends a message to "everyone watching this auction" and nobody else.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: the emit</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-4-realtime-socketio-redis/server/src/realtime.ts</code> · lines 74–76 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-4-realtime-socketio-redis/server/src/realtime.ts#L74-L76" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">realtime.ts · lines 74–76</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="74">    publishAuctionChanged(event) {</span>
+<span class="l hl" data-n="75">      io.to(auctionRoom(event.slug)).emit('auction:changed', event);</span>
+<span class="l" data-n="76">    },</span>
+</code></pre>
+          </div>
+          <p>One line. With the Redis adapter installed (line 69 of the same file), <code>io.to(room).emit</code> reaches sockets in that room on <b>every</b> API copy, not just this one.</p>
+        </div>
+      </details>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: publish only after COMMIT</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-4-realtime-socketio-redis/server/src/app.ts</code> · lines 341–353 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-4-realtime-socketio-redis/server/src/app.ts#L341-L353" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">app.ts · lines 341–353</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l hl" data-n="341">      await client.query('COMMIT');</span>
+<span class="l" data-n="342">      const acceptedBid = toBid({</span>
+<span class="l" data-n="343">        ...inserted.rows[0],</span>
+<span class="l" data-n="344">        bidder_id: bidder.id,</span>
+<span class="l" data-n="345">        bidder_display_name: bidder.display_name,</span>
+<span class="l" data-n="346">        bidder_handle: bidder.handle,</span>
+<span class="l" data-n="347">      });</span>
+<span class="l hl" data-n="348">      try {</span>
+<span class="l hl" data-n="349">        publishAuctionChanged({ slug: params.data.slug, bidId: acceptedBid.id });</span>
+<span class="l hl" data-n="350">      } catch (error) {</span>
+<span class="l hl" data-n="351">        request.log.error({ err: error, slug: params.data.slug }, 'auction update publish failed');</span>
+<span class="l hl" data-n="352">      }</span>
+<span class="l" data-n="353">      return reply.code(201).send(acceptedBid);</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>341</code> The transaction commits first.</li>
+            <li><code>348–352</code> Only then is the event published, wrapped in its own try/catch: if Redis has a problem, the error is logged and Chen still gets his 201.</li>
+            <li><code>353</code> The response goes out. If the order were reversed, a watcher could re-fetch before the bid was visible and see the old price.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: the browser subscription</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-4-realtime-socketio-redis/web/src/liveAuction.ts</code> · lines 41–57 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-4-realtime-socketio-redis/web/src/liveAuction.ts#L41-L57" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">liveAuction.ts · lines 41–57</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="41">export function watchAuctionChanges(</span>
+<span class="l" data-n="42">  slug: string,</span>
+<span class="l" data-n="43">  onChanged: (event: AuctionChangedEvent) =&gt; void,</span>
+<span class="l" data-n="44">): () =&gt; void {</span>
+<span class="l hl" data-n="45">  const socket = io({ autoConnect: false, transports: ['websocket'] });</span>
+<span class="l hl" data-n="46">  socket.on('connect', () =&gt; {</span>
+<span class="l hl" data-n="47">    socket.emit('auction:watch', { slug }, (_result: SubscriptionResult) =&gt; undefined);</span>
+<span class="l" data-n="48">  });</span>
+<span class="l" data-n="49">  socket.on('auction:changed', (event: AuctionChangedEvent) =&gt; {</span>
+<span class="l hl" data-n="50">    if (event.slug === slug) onChanged(event);</span>
+<span class="l" data-n="51">  });</span>
+<span class="l" data-n="52">  const connectTimer = window.setTimeout(() =&gt; socket.connect(), 0);</span>
+<span class="l" data-n="53">  return () =&gt; {</span>
+<span class="l" data-n="54">    window.clearTimeout(connectTimer);</span>
+<span class="l" data-n="55">    socket.disconnect();</span>
+<span class="l" data-n="56">  };</span>
+<span class="l" data-n="57">}</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>45</code> WebSocket only, connected manually.</li>
+            <li><code>46–48</code> On <b>every</b> connect, including reconnects, it asks to watch the auction again, so a dropped connection rejoins its room.</li>
+            <li><code>49–51</code> It ignores events for other auctions, a cheap safety check.</li>
+            <li><code>53–56</code> The returned function disconnects, so React can clean up when the page unmounts.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details class="solution-reveal code-reveal">
+        <summary>View code: re-fetch on each event</summary>
+        <div class="sol">
+          <p class="cr-file"><code>part-4-realtime-socketio-redis/web/src/App.tsx</code> · lines 72–78 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-4-realtime-socketio-redis/web/src/App.tsx#L72-L78" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+          <div class="codebox">
+            <div class="codebar"><span class="fname">App.tsx · lines 72–78</span><button class="copy" type="button">Copy</button></div>
+            <pre class="ln"><code><span class="l" data-n="72">  useEffect(() =&gt; {</span>
+<span class="l" data-n="73">    setError('');</span>
+<span class="l hl" data-n="74">    void refreshAuction().catch(() =&gt; setError('Auction not found or unavailable.'));</span>
+<span class="l hl" data-n="75">    return watchAuctionChanges(slug, () =&gt; {</span>
+<span class="l hl" data-n="76">      void refreshAuction().catch(() =&gt; undefined);</span>
+<span class="l hl" data-n="77">    });</span>
+<span class="l" data-n="78">  }, [refreshAuction, slug]);</span>
+</code></pre>
+          </div>
+          <ol class="cr-explain">
+            <li><code>74</code> The first load.</li>
+            <li><code>75–77</code> Each <code>auction:changed</code> triggers <code>refreshAuction</code>, which is the coalescer from <code>liveAuction.ts</code> lines 10–39: if a refresh is already running, it just marks "do one more after this". A burst of five bids causes two fetches, not five. Errors in background refreshes are swallowed on purpose: the last good view stays on screen.</li>
+          </ol>
+        </div>
+      </details>
+
+      <div class="box repo"><span class="tag">Repo note: refetch on reconnect wasn't built</span><p>The Part 4 grilling decided the page should re-fetch the whole auction after every reconnect, because Redis pub/sub doesn't replay events missed while disconnected. The code rejoins the room on reconnect (lines 46–48 above) but <b>doesn't re-fetch</b>, and <code>GRILL.md</code> lists that work as Slice 2, "proposed; awaiting confirmation". So a page that was offline while Ben bid will show the old price until the next event.</p></div>
+
+      <div class="box stretch"><span class="tag">Stretch exercise: add the refetch on reconnect</span><p>Give your agent this:</p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">prompt</span><button class="copy" type="button">Copy</button></div>
+          <pre><code>In part 4, a detail page that reconnects after a dropped socket must re-fetch the auction,
+because events sent while it was disconnected are lost. Change watchAuctionChanges so
+that on every connect after the first it calls the same refresh as an event would
+(through the coalescer). Add a test that simulates a disconnect, an accepted bid while
+disconnected, and a reconnect, and asserts the page shows the new price. Update GRILL.md
+to mark Slice 2 done.</code></pre>
+        </div>
+      </div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li><code>npm start</code> now also starts Redis, and the API log says the Socket.IO Redis backplane connected;</li>
+          <li>two windows on the same auction: bid $103 in one, the other updates price, bidder, count, minimum and history within a second, no reload;</li>
+          <li>the realtime Playwright test passes; the bidding war passes with no reloads;</li>
+          <li>stop the API's Redis (<code>docker compose -f ../docker-compose.yml stop redis</code>) and restart only the API and web with <code>npm run dev</code> (not <code>npm start</code>, which would start Redis again): the API refuses to start (Redis is a startup dependency). Start Redis again.</li>
+        </ul>
+        <figure class="wire">
+          <svg viewbox="0 0 680 260" role="img" aria-label="Two windows on the Used GPU auction. Ben bids $103 in the left one; the right one, Asha's, updates to $103 without a reload" style="font-family:var(--sans)">
+            <rect class="bx" x="10" y="10" width="320" height="240" rx="10"></rect>
+            <text x="26" y="36" font-weight="700">BIDDER · Ben</text>
+            <rect class="bx" x="26" y="56" width="200" height="40" rx="6"></rect>
+            <text x="40" y="82" font-size="18" font-weight="700">103.00</text>
+            <rect x="26" y="116" width="288" height="36" rx="8" style="fill:var(--good-soft)"></rect>
+            <text class="okt" x="38" y="139">Bid accepted — you are the highest bidder.</text>
+            <rect class="bx" x="350" y="10" width="320" height="240" rx="10"></rect>
+            <text x="366" y="36" font-weight="700">BIDDER · Asha</text>
+            <text class="price" x="366" y="100" font-size="30">$103</text>
+            <text class="mut" x="366" y="128">Current bidder @ben</text>
+            <text x="366" y="154">Minimum bid $104</text>
+            <rect x="366" y="170" width="112" height="24" rx="6" style="fill:var(--accent-soft)"></rect>
+            <text x="376" y="187" style="fill:var(--accent)">updated live</text>
+            <path d="M330 120 Q340 40 350 120" stroke="var(--muted)" stroke-width="2" stroke-dasharray="4 4" fill="none"></path>
+            <text x="340" y="34" text-anchor="middle" font-size="11" style="fill:var(--muted)">auction:changed</text>
+          </svg>
+        </figure>
+      </div>
+
+      <div class="checkpoint" data-ck="p2:part-4">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 6</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="redis"> <span>Part 4 starts Redis first and runs on 3104/5104</span></label></li>
+          <li><label><input type="checkbox" data-id="live"> <span>A bid in one window updates another within a second, no reload</span></label></li>
+          <li><label><input type="checkbox" data-id="aftercommit"> <span>The event is sent only after COMMIT, and rejected bids send nothing</span></label></li>
+          <li><label><input type="checkbox" data-id="noprice"> <span>The event carries <code>{ slug, bidId }</code> only; pages re-fetch over HTTP</span></label></li>
+          <li><label><input type="checkbox" data-id="war"> <span>The bidding war passes with all reloads removed</span></label></li>
+          <li><label><input type="checkbox" data-id="gap"> <span>I know reconnect-refetch wasn't built (and maybe built it as a stretch)</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/socket-io-redis/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Socket.io &amp; Redis</span><span class="w-time">02:41:11 · 16 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/implementing-the-real-time-updates/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Implementing the Real-Time Updates</span><span class="w-time">02:57:01 · 12 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ 7. QUIZ ============ -->
+    <section class="sec" id="quiz">
+      <p class="eyebrow">Check yourself</p>
+      <h2>Quiz</h2>
+      <div class="quiz" data-quiz="p2">
+        <fieldset class="q" data-answer="a">
+          <legend><span class="q-n">1</span> Part 2's tests all passed, but two $102 bids were accepted. Why did the tests miss it?</legend>
+          <label><input type="radio" name="p2q1" value="a"> <span>They sent one request, waited for the answer, then sent the next, so two requests never overlapped</span></label>
+          <label><input type="radio" name="p2q1" value="b"> <span>The tests used the wrong database</span></label>
+          <label><input type="radio" name="p2q1" value="c"> <span>Playwright can't send bids</span></label>
+          <label><input type="radio" name="p2q1" value="d"> <span>The minimum-bid rule was wrong</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>A race needs overlap. Sequential tests can't produce it; the bidding war (with a delay that widens the window) can.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="c">
+          <legend><span class="q-n">2</span> In Part 3's fix, why must the current price be read <em>after</em> <code>SELECT … FOR UPDATE</code>?</legend>
+          <label><input type="radio" name="p2q2" value="a"> <span>Because SQL requires that order</span></label>
+          <label><input type="radio" name="p2q2" value="b"> <span>To make the query faster</span></label>
+          <label><input type="radio" name="p2q2" value="c"> <span>Because reading first would use the price from before the lock, which another request may already have beaten, exactly the original race</span></label>
+          <label><input type="radio" name="p2q2" value="d"> <span>It doesn't matter as long as both are in one transaction</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>The lock only helps if the decision uses data read while holding it. A price read before the lock is already stale for anyone who had to wait.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="b">
+          <legend><span class="q-n">3</span> Chen's request arrives at 5:59:59.9 but waits 1 second for the lock. What does Part 3 do, and why?</legend>
+          <label><input type="radio" name="p2q3" value="a"> <span>Accepts it: it arrived before 6:00</span></label>
+          <label><input type="radio" name="p2q3" value="b"> <span>Rejects it with <code>AUCTION_CLOSED</code>: the clock is read after the lock, at the moment of decision</span></label>
+          <label><input type="radio" name="p2q3" value="c"> <span>Retries it automatically after the auction closes</span></label>
+          <label><input type="radio" name="p2q3" value="d"> <span>Accepts it but marks it late</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>The decision time is when the bid is actually judged, which is after the lock. The same reading is stored as the bid's time, so they can't disagree.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="d">
+          <legend><span class="q-n">4</span> At the end of Part 2, the bidding-war test <em>passes</em>. What does that tell you?</legend>
+          <label><input type="radio" name="p2q4" value="a"> <span>Bidding is safe</span></label>
+          <label><input type="radio" name="p2q4" value="b"> <span>The fix works</span></label>
+          <label><input type="radio" name="p2q4" value="c"> <span>Edge is installed correctly, nothing more</span></label>
+          <label><input type="radio" name="p2q4" value="d"> <span>The race was reproduced: the test asserts duplicates exist</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>Always read what a test asserts. In Part 2 it proves the bug exists; in Part 3 the same scenario is flipped to prove it's gone.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="a">
+          <legend><span class="q-n">5</span> Why does Part 4 publish <code>auction:changed</code> only after COMMIT?</legend>
+          <label><input type="radio" name="p2q5" value="a"> <span>So a page that re-fetches on the event is sure to see the new bid; and a rolled-back or rejected bid never triggers an update</span></label>
+          <label><input type="radio" name="p2q5" value="b"> <span>Socket.IO can't send during a transaction</span></label>
+          <label><input type="radio" name="p2q5" value="c"> <span>To save Redis memory</span></label>
+          <label><input type="radio" name="p2q5" value="d"> <span>Because Redis needs the bid ID first</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>Before COMMIT, the bid isn't visible to other connections and might still be rolled back. Publishing early can make pages re-fetch the old state, or announce a bid that never happened.</p>
+        </fieldset>
+        <fieldset class="q" data-answer="c">
+          <legend><span class="q-n">6</span> Why does the Part 4 event carry only <code>{ slug, bidId }</code> and no price?</legend>
+          <label><input type="radio" name="p2q6" value="a"> <span>Prices are secret</span></label>
+          <label><input type="radio" name="p2q6" value="b"> <span>Socket.IO messages can't contain numbers</span></label>
+          <label><input type="radio" name="p2q6" value="c"> <span>To keep PostgreSQL the single source of truth: pages re-fetch real state, so a missed, duplicated or out-of-order event can't show a wrong price</span></label>
+          <label><input type="radio" name="p2q6" value="d"> <span>To make the event smaller for Redis</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>The event is a doorbell. Whatever happens to the doorbell, the page ends up showing what the database says.</p>
+        </fieldset>
+        <p class="quiz-score" aria-live="polite">Answered 0 of 6</p>
+        <button type="button" class="btn ghost quiz-reset">Try again</button>
+      </div>
+    </section>
+
+    <!-- ============ 8. NEXT ============ -->
+    <section class="sec" id="next">
+      <p class="eyebrow">What's next</p>
+      <h2>Next: ship it</h2>
+      <p>You've built a marketplace that survives a bidding war and updates live. On the last page you'll put it under pressure: a fresh agent hunts a planted concurrency bug, the auction closes itself through RabbitMQ without ever losing or doubling a notification, Chen pays through a mock Stripe, and you follow the whole story in one Jaeger trace.</p>
+      <div class="linkcards"><a href="../../"><b>← Part 1 of 3 · Set up and learn the agent</b></a><a href="../live-auction-ship/"><b>Part 3 of 3 · Ship it: Parts 5–8 →</b>Hunt a hidden defect, close auctions through a transactional outbox, take payment safely, and trace one auction across four services.</a></div>
+    </section>
+<!-- awsq:bottom -->
+<div class="awsq awsq-bottom" role="navigation" aria-label="Capstone navigation (bottom)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 19 of 23 · Part 2 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../../"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent</span></a><a class="awsq-home" href="../../../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="../live-auction-ship/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../../../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../../../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../../../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../../../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../../../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../../../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../../../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../../../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../../../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../../../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../../../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../../../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../../../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../../../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../../../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../../../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../../../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../../../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../../" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="cur" href="./" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4" aria-current="page">P19·2</a></li><li><a class="" href="../live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="" href="../../../nova-brown-blog-writer/" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="" href="../../../nova-brown-blog-writer/pages/nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="" href="../../../nova-brown-blog-writer/pages/nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../../../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../../../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../../../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/archive/refs/heads/master.zip">⬇ Download all<small>.zip from GitHub</small></a></div></div></div>
+<!-- /awsq:bottom -->
+  </main>
+</div>
+
+<footer class="foot">
+  <div class="foot-in">
+    <p><b>Live Auction House</b> follows <a href="https://master.dev/courses/fullstack-app-codex/" target="_blank" rel="noopener"><i>Build a Fullstack App with Codex</i></a>
+    by Spencer Schneidenbach on master.dev, and his public
+    <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">course repo</a>.
+    The explanations, prompts, simulators and quizzes on this page are our own; the code excerpts are from that repo, with links to the exact lines.</p>
+    <p class="muted">Previous / next: <a href="../../">← Part 1 of 3</a> · <a href="../../../../">AWS AI Capstone</a> · <a href="../live-auction-ship/">Next: Part 3 of 3 →</a></p>
+  </div>
+</footer>
+<script src="../../assets/js/f88dabf3c70aec22.js"></script>
+<script>
+document.querySelectorAll('.mobile-toc a').forEach(a => a.addEventListener('click', () => a.closest('details').open = false));
+</script>
+</body>
+</html>

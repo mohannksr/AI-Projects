@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="../../../../favicon.svg"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Simulated run: watch Nova research a topic and Brown write, review and edit the article, step by step.">
+<title>Project 20 · Part 3 · Nova + Brown blog writer · Simulated run · AWS AI Capstone</title>
+<meta name="author" content="Shivank Agarwal">
+<style>
+  :root {
+    --paper: #F4F6F8;
+    --sheet: #FFFFFF;
+    --ink: #18212F;
+    --muted: #5B6676;
+    --rule: #D5DBE3;
+    --nova: #0B7A75;
+    --nova-tint: #E3F2F1;
+    --brown: #7A4A2B;
+    --brown-tint: #F3EAE3;
+    --pencil: #2C55D6;
+    --pencil-tint: #E8EDFC;
+    --term-bg: #142033;
+    --term-bar: #22324A;
+    --serif: "Charter", "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
+    --sans: "Avenir Next", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.5; }
+  button, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--pencil); outline-offset: 2px; }
+  code { font-family: var(--mono); font-size: 0.86em; background: #E4E9EF; padding: 0.08em 0.32em; border-radius: 4px; overflow-wrap: anywhere; }
+
+  .wrap { max-width: 92rem; margin: 0 auto; padding: 0 1.25rem; }
+  header.top { padding-top: 1.6rem; padding-bottom: 0.9rem; }
+  .brand { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.7rem; }
+  .brand strong { color: var(--ink); font-weight: 650; }
+  h1 { font-weight: 750; font-size: clamp(1.6rem, 2.8vw, 2.15rem); letter-spacing: -0.02em; line-height: 1.12; margin: 0 0 0.45rem; }
+  .dek { font-family: var(--serif); font-size: 1.04rem; line-height: 1.5; color: var(--muted); margin: 0; max-width: 62rem; }
+
+  /* ------------------------------------------------ controls */
+  .player { background: var(--sheet); border: 1px solid var(--rule); border-radius: 16px; padding: 0.85rem 1rem 1rem; margin-bottom: 2rem; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.6rem; }
+  .btn { border: 1.5px solid var(--ink); background: var(--sheet); border-radius: 999px; padding: 0.42rem 0.95rem; cursor: pointer; font-weight: 600; font-size: 0.92rem; }
+  .btn:hover { background: #EEF1F5; }
+  .btn.primary { background: var(--ink); color: #fff; min-width: 6.4rem; }
+  .btn.primary:hover { background: #2B3850; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .speed { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: var(--muted); margin-left: 0.4rem; }
+  .speed select { border: 1.5px solid var(--rule); border-radius: 8px; padding: 0.3rem 0.4rem; background: var(--sheet); }
+  .counter { margin-left: auto; font-size: 0.92rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .counter strong { color: var(--ink); }
+  .keys { font-size: 0.82rem; color: var(--muted); }
+
+  .track { display: flex; gap: 3px; margin: 0.7rem 0 0.1rem; }
+  .track button { flex: 1; height: 10px; border: 0; padding: 0; border-radius: 3px; cursor: pointer; background: #DCE2E9; }
+  .track button.done.ph-nova, .track button.done.ph-hand { background: #9FD3CF; }
+  .track button.done.ph-brown, .track button.done.ph-done { background: #D9BFAE; }
+  .track button.done.ph-review { background: #AFC0F2; }
+  .track button.done.ph-brief { background: #B8C2CF; }
+  .track button.now { background: var(--ink) !important; }
+
+  /* ------------------------------------------------ pipeline */
+  .pipeline { display: flex; align-items: stretch; gap: 0.4rem; overflow-x: auto; padding: 0.7rem 0 0.3rem; }
+  .pipeline .arrow { align-self: center; color: var(--muted); font-size: 1.1rem; flex: none; }
+  .grp { border-radius: 12px; padding: 0.45rem 0.55rem 0.5rem; flex: none; }
+  .grp .gl { font-size: 0.78rem; font-weight: 700; margin: 0 0 0.35rem 0.15rem; }
+  .grp.nova { background: var(--nova-tint); }
+  .grp.nova .gl { color: var(--nova); }
+  .grp.brown { background: var(--brown-tint); }
+  .grp.brown .gl { color: var(--brown); }
+  .grp .chips { display: flex; gap: 0.3rem; align-items: center; }
+  .chip { font-size: 0.8rem; font-weight: 600; padding: 0.26rem 0.5rem; border-radius: 8px; border: 1.5px solid #C3CAD4; background: var(--sheet); color: var(--muted); white-space: nowrap; transition: background 0.25s, color 0.25s, border-color 0.25s; }
+  .chip.file { font-family: var(--mono); font-weight: 500; font-size: 0.74rem; align-self: center; }
+  .chip.done { color: var(--ink); border-color: #9AA6B5; }
+  .chip.now { color: #fff; border-color: var(--ink); background: var(--ink); }
+  .grp.nova .chip.now { background: var(--nova); border-color: var(--nova); }
+  .grp.brown .chip.now { background: var(--brown); border-color: var(--brown); }
+  .chip.review.now { background: var(--pencil) !important; border-color: var(--pencil) !important; }
+  .loopmark { font-size: 0.8rem; color: var(--pencil); font-weight: 700; padding: 0 0.1rem; }
+
+  /* ------------------------------------------------ main grid */
+  .grid { display: grid; grid-template-columns: 21rem minmax(0, 1fr) minmax(0, 1.08fr); gap: 1rem; margin-top: 0.8rem; }
+  .pane { border: 1px solid var(--rule); border-radius: 12px; background: var(--sheet); min-width: 0; display: flex; flex-direction: column; }
+  .pane > .ph { font-size: 0.85rem; font-weight: 650; color: var(--muted); padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; gap: 0.6rem; }
+
+  /* narration */
+  .narr { padding: 1rem 1.05rem 1.1rem; }
+  .phase { display: inline-block; font-size: 0.8rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; margin-bottom: 0.6rem; }
+  .phase.ph-brief { background: #E4E9EF; color: var(--ink); }
+  .phase.ph-nova, .phase.ph-hand { background: var(--nova-tint); color: var(--nova); }
+  .phase.ph-brown, .phase.ph-done { background: var(--brown-tint); color: var(--brown); }
+  .phase.ph-review { background: var(--pencil-tint); color: var(--pencil); }
+  .narr h2 { font-size: 1.3rem; line-height: 1.25; margin: 0 0 0.6rem; letter-spacing: -0.01em; }
+  .narr .body { font-family: var(--serif); font-size: 1rem; line-height: 1.6; }
+  .narr .body p { margin: 0 0 0.75rem; }
+  .narr .body em { color: #23345F; }
+  details.steps { margin-top: auto; border-top: 1px solid var(--rule); padding: 0.7rem 1.05rem 0.9rem; }
+  details.steps summary { cursor: pointer; font-size: 0.9rem; font-weight: 650; color: var(--muted); }
+  details.steps ol { margin: 0.6rem 0 0; padding-left: 1.5rem; font-size: 0.88rem; }
+  details.steps li { margin: 0.15rem 0; }
+  details.steps button { border: 0; background: none; padding: 0.1rem 0; cursor: pointer; text-align: left; color: var(--muted); }
+  details.steps button[aria-current="step"] { color: var(--ink); font-weight: 700; }
+
+  /* terminal */
+  .term { background: var(--term-bg); border-color: var(--term-bg); }
+  .term > .ph { background: var(--term-bar); color: #C9D4E3; border-bottom: 0; border-radius: 12px 12px 0 0; }
+  .term > .ph .sess { color: #fff; }
+  .term pre { margin: 0; padding: 0.8rem 0.95rem 1rem; font-family: var(--mono); font-size: 0.76rem; line-height: 1.6; color: #D5DDE8; overflow: auto; height: clamp(22rem, calc(100vh - 25rem), 42rem); white-space: pre-wrap; word-break: break-word; }
+  .l-cmd { color: #FFFFFF; font-weight: 600; }
+  .l-you { color: #FFFFFF; font-weight: 600; }
+  .l-out { color: #D5DDE8; }
+  .l-info { color: #8FB7FF; }
+  .l-ok { color: #7FD4A6; }
+  .l-tool { color: #7FD8E0; }
+  .l-dim { color: #8C9AB0; }
+  .l-new { animation: arrive 0.5s ease-out; }
+  @keyframes arrive { from { background: rgba(143, 183, 255, 0.22); } to { background: transparent; } }
+  .cursor { display: inline-block; width: 0.55em; height: 1em; background: #8FB7FF; vertical-align: -0.12em; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* files + preview */
+  .files .tree { position: relative; padding: 0.55rem 0.6rem 0.65rem; font-family: var(--mono); font-size: 0.78rem; height: 12.5rem; overflow: auto; border-bottom: 1px solid var(--rule); }
+  .tree ul { list-style: none; margin: 0; padding-left: 1rem; }
+  .tree > ul { padding-left: 0; }
+  .tree li { margin: 0; }
+  .tree button { border: 0; background: none; padding: 0.12rem 0.35rem; border-radius: 5px; cursor: pointer; text-align: left; width: 100%; color: var(--ink); overflow-wrap: anywhere; }
+  .tree button:hover { background: #EEF1F5; }
+  .tree button.sel { background: var(--pencil-tint); color: var(--pencil); font-weight: 600; }
+  .tree .dir { color: var(--muted); padding: 0.12rem 0.35rem; display: block; }
+  .tree .root { font-weight: 700; color: var(--ink); }
+  .tree .fresh { animation: fresh 2.6s ease-out; }
+  @keyframes fresh { 0%, 40% { background: #FFF1B8; } 100% { background: transparent; } }
+  .tree .tag { font-family: var(--sans); font-size: 0.7rem; font-weight: 700; color: #8A6A00; margin-left: 0.35rem; }
+  .tree .empty { color: var(--muted); font-family: var(--sans); font-size: 0.85rem; padding: 0.3rem; }
+
+  .preview { padding: 0.75rem 0.9rem 1rem; overflow: auto; height: clamp(12rem, calc(100vh - 37.5rem), 30rem); }
+  .pv-title { font-family: var(--mono); font-size: 0.84rem; font-weight: 700; margin: 0 0 0.3rem; overflow-wrap: anywhere; }
+  .pv-label { font-size: 0.8rem; margin: 0 0 0.6rem; display: inline-block; padding: 0.12rem 0.5rem; border-radius: 6px; }
+  .pv-label.k-real { background: #E2F4EA; color: #1E6B43; }
+  .pv-label.k-mixed { background: #FFF4D6; color: #7A5A00; }
+  .preview pre { margin: 0; font-family: var(--mono); font-size: 0.74rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word; background: #F7F9FB; border: 1px solid #E3E8EE; border-radius: 8px; padding: 0.65rem 0.75rem; }
+  .pair { border: 1px solid #E3E8EE; border-radius: 10px; padding: 0.6rem 0.7rem; margin: 0 0 0.7rem; }
+  .pair .where { font-size: 0.8rem; font-weight: 700; color: var(--muted); margin: 0 0 0.35rem; }
+  .pair .b, .pair .a { font-family: var(--serif); font-size: 0.86rem; line-height: 1.5; padding: 0.35rem 0.5rem; border-radius: 6px; margin: 0.2rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .pair .b { background: #FBECEC; color: #6B2B2B; }
+  .pair .a { background: #E7F5EC; color: #1F4D33; }
+  .pair .b::before { content: "Before  "; font-family: var(--sans); font-weight: 700; font-size: 0.72rem; }
+  .pair .a::before { content: "After  "; font-family: var(--sans); font-weight: 700; font-size: 0.72rem; }
+  .pair .note { font-size: 0.8rem; color: var(--muted); margin: 0.3rem 0 0; }
+  .summary { font-size: 0.86rem; margin: 0 0 0.7rem; }
+  table.kv { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin: 0 0 0.8rem; }
+  table.kv th, table.kv td { text-align: left; vertical-align: top; padding: 0.4rem 0.45rem; border-bottom: 1px solid #E3E8EE; }
+  table.kv th { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+  .mm { display: grid; grid-template-columns: 1fr; gap: 0.6rem; }
+  .mm svg { width: 100%; max-width: 26rem; height: auto; display: block; margin: 0 auto; }
+  .caps { font-size: 0.82rem; padding-left: 1.2rem; margin: 0.3rem 0 0; }
+  .caps li { margin: 0.2rem 0; }
+  .sub { font-size: 0.82rem; font-weight: 700; color: var(--muted); margin: 0.6rem 0 0.3rem; }
+
+  footer { padding: 0 0 3rem; font-size: 0.9rem; color: var(--muted); }
+  footer p { max-width: 60rem; }
+
+  @media (max-width: 1250px) {
+    .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .narr-pane { grid-column: 1 / -1; }
+    details.steps { margin-top: 0; }
+  }
+  @media (max-width: 820px) {
+    .grid { grid-template-columns: 1fr; }
+    .term pre { height: 24rem; }
+    .preview { height: auto; max-height: 30rem; }
+    .counter { margin-left: 0; width: 100%; }
+    .keys { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .l-new, .tree .fresh, .cursor { animation: none; }
+    .chip { transition: none; }
+  }
+</style>
+</head>
+<body>
+<!-- awsq:top -->
+<style>
+.awsq{--q-card:var(--card,var(--surface,#fff));--q-card2:var(--card-2,var(--surface-2,#f3f3f0));--q-rule:var(--rule,var(--line,#ddd));
+  --q-ink:var(--ink,#1a1a1a);--q-muted:var(--muted,#666);--q-acc:var(--tool,var(--accent,#0b7f73));--q-acc-t:var(--tool-t,var(--accent-soft,#d6f2ee));
+  --q-acc-ink:var(--tool-ink,var(--accent,#075a51));--q-cur:var(--brain,var(--gold,#b07600));--q-on:var(--card,var(--surface,#fff));
+  --q-focus:var(--focus,var(--accent,#2958c4));--q-mono:var(--font-mono,"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace);
+  max-width:72rem;margin:18px auto;padding:0 40px;font-family:var(--font-body,inherit)}
+.awsq-box{background:var(--q-card);border:1px solid var(--q-rule);border-radius:12px;padding:12px 14px}
+.awsq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}
+.awsq-cap{display:block;margin:0;font:600 .7rem/1.4 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-row{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.awsq-l{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;padding:9px 13px;border-radius:9px;border:1px solid var(--q-rule);color:var(--q-ink);text-decoration:none;font-size:.95rem;line-height:1.3}
+a.awsq-l:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-next{text-align:right;align-items:flex-end}
+.awsq-d{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--q-acc)}
+.awsq-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+span.awsq-l{border-style:dashed;color:var(--q-muted)} span.awsq-l .awsq-d,span.awsq-l .awsq-t{color:var(--q-muted);font-weight:400}
+a.awsq-home{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:6px 12px;border-radius:9px;text-decoration:none;color:var(--q-ink);text-align:center;font-size:.85rem;line-height:1.3}
+a.awsq-home:hover{background:var(--q-card2);text-decoration:none}
+.awsq-home b{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-steps{display:flex;gap:5px;margin:11px 0 0;padding:0;list-style:none}
+.awsq-steps li{flex:1 1 0;margin:0;padding:0;list-style:none}
+.awsq-steps li::before{content:none}
+.awsq-steps a{display:block;text-align:center;padding:4px 0;border-radius:5px;font:600 .75rem/1.4 var(--q-mono);text-decoration:none;background:var(--q-card2);border:1px solid var(--q-rule);color:var(--q-muted)}
+.awsq-steps a.done{background:var(--q-acc-t);color:var(--q-acc-ink);border-color:transparent}
+.awsq-steps a.cur{background:var(--q-cur);color:var(--q-on);border-color:transparent}
+.awsq-steps a:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-recs{display:flex;flex-wrap:wrap;gap:8px;margin:11px 0 0}
+.awsq-rec{flex:1 1 220px;display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:9px;border:1px solid var(--q-acc);background:var(--q-acc-t);
+  color:var(--q-acc-ink);font-weight:700;font-size:.92rem;line-height:1.3;text-decoration:none}
+a.awsq-rec:hover{text-decoration:none;filter:brightness(.97)}
+.awsq-rec i{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--q-acc);color:var(--q-on);font-style:normal;font-size:.7rem}
+.awsq-rec small{margin-left:auto;font:600 .68rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+.awsq-files{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+.awsq-files > b{margin-right:4px;font:600 .7rem/1.3 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-fb{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-rule);color:var(--q-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-fb:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-fb small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+span.awsq-fb{border-style:dashed;color:var(--q-muted);font-weight:600}
+.awsq a:focus-visible{outline:2px solid var(--q-focus);outline-offset:2px}
+.awsq a.aih{flex:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:var(--q-acc);color:var(--q-on);
+  font:700 .74rem/1.2 var(--q-mono);letter-spacing:.04em;text-decoration:none;white-space:nowrap}
+.awsq a.aih:hover{filter:brightness(1.08);text-decoration:none}
+.awsq-ver{display:flex;justify-content:flex-end;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+a.awsq-vl{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-acc);color:var(--q-acc-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-vl:hover{background:var(--q-acc-t);text-decoration:none}
+.awsq-vl small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-bottom{padding:0 !important;margin:48px 0 8px;max-width:none}
+.awsq-inmain{padding:0 !important;margin:0 0 28px;max-width:none}
+@media (max-width:1100px){.awsq{padding:0 24px}}
+@media (max-width:640px){.awsq-steps{flex-wrap:wrap}.awsq-steps li{flex:1 0 28px}.awsq{padding:0 16px}.awsq-t{white-space:normal;overflow-wrap:anywhere}.awsq-row{grid-template-columns:1fr 1fr}a.awsq-home{grid-column:1 / -1;grid-row:1;flex-direction:row;gap:8px}a.awsq-rec small{display:none}}
+@media print{.awsq{display:none}}
+</style>
+<div class="awsq awsq-top" role="navigation" aria-label="Capstone navigation (top)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 20 of 23 · Part 3 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../nova-brown-solution/"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough</span></a><a class="awsq-home" href="../../../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="../../../ai-tutor-agentic-rag/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../../../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../../../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../../../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../../../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../../../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../../../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../../../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../../../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../../../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../../../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../../../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../../../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../../../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../../../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../../../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../../../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../../../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../../../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../../../live-auction-house/" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="done" href="../../../live-auction-house/pages/live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="done" href="../../../live-auction-house/pages/live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="done" href="../../" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="done" href="../nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="cur" href="./" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run" aria-current="page">P20·3</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../../../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../../../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../../../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/balajiraghuram92/balajiraghuram92.github.io/tree/main/zips/Code/Capstone-Projects/nova-brown-blog-agent" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://balajiraghuram92.github.io/zips/Code/Zips/nova-brown-blog-agent-code.zip" download>⬇ Download all<small>.zip</small></a></div></div></div>
+<!-- /awsq:top -->
+<header class="top wrap">
+  <p class="brand"><strong>Future with Shivank</strong>  /  Nova + Brown blog writer  /  Simulation</p>
+  <h1>Watch Nova and Brown research and write an article</h1>
+  <p class="dek">A step-by-step replay of one full run on the context-engineering sample that ships with the project. Press Play, or step through at your own pace. The files in the article folder are the real ones from the project; where a detail is reconstructed or illustrative, its label says so.</p>
+</header>
+
+<main class="wrap">
+  <section class="player" aria-label="Simulation player">
+    <div class="controls">
+      <button class="btn" id="restart" type="button">Restart</button>
+      <button class="btn" id="back" type="button">Back</button>
+      <button class="btn primary" id="play" type="button">Play</button>
+      <button class="btn" id="next" type="button">Next</button>
+      <label class="speed">Speed
+        <select id="speed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+        </select>
+      </label>
+      <span class="keys">Keys: Space plays or pauses, arrow keys step</span>
+      <span class="counter" id="counter"></span>
+    </div>
+    <div class="track" id="track" aria-label="Steps"></div>
+
+    <div class="pipeline" id="pipeline" aria-hidden="true">
+      <span class="chip file" data-stage="brief">article_guideline.md</span>
+      <span class="arrow">→</span>
+      <div class="grp nova"><p class="gl">Nova: research agent</p>
+        <div class="chips">
+          <span class="chip" data-stage="n-extract">Extract links</span>
+          <span class="chip" data-stage="n-ingest">Fetch pages</span>
+          <span class="chip" data-stage="n-research">Research x3</span>
+          <span class="chip" data-stage="n-filter">Filter</span>
+          <span class="chip" data-stage="n-scrape">Deep read</span>
+          <span class="chip" data-stage="n-compile">Compile</span>
+        </div>
+      </div>
+      <span class="arrow">→</span>
+      <span class="chip file" data-stage="research">research.md</span>
+      <span class="arrow">→</span>
+      <div class="grp brown"><p class="gl">Brown: writing agent</p>
+        <div class="chips">
+          <span class="chip" data-stage="b-load">Load</span>
+          <span class="chip" data-stage="b-media">Diagrams</span>
+          <span class="chip" data-stage="b-draft">Draft</span>
+          <span class="chip review" data-stage="b-review">Review</span>
+          <span class="loopmark">⇄</span>
+          <span class="chip" data-stage="b-edit">Edit</span>
+        </div>
+      </div>
+      <span class="arrow">→</span>
+      <span class="chip file" data-stage="article">article.md</span>
+    </div>
+
+    <div class="grid">
+      <div class="pane narr-pane">
+        <div class="narr" aria-live="polite">
+          <span class="phase" id="phase"></span>
+          <h2 id="title"></h2>
+          <div class="body" id="narr"></div>
+        </div>
+        <details class="steps">
+          <summary>All steps</summary>
+          <ol id="steps"></ol>
+        </details>
+      </div>
+
+      <div class="pane term">
+        <div class="ph"><span class="sess" id="sess"></span><span id="sessnote"></span></div>
+        <pre id="term" aria-label="Terminal output"></pre>
+      </div>
+
+      <div class="pane files">
+        <div class="ph"><span>Article folder</span><span>click a file to open it</span></div>
+        <div class="tree" id="tree"></div>
+        <div class="preview" id="preview"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- awsq:bottom -->
+<div class="awsq awsq-bottom" role="navigation" aria-label="Capstone navigation (bottom)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 20 of 23 · Part 3 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../nova-brown-solution/"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough</span></a><a class="awsq-home" href="../../../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="../../../ai-tutor-agentic-rag/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../../../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../../../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../../../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../../../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../../../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../../../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../../../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../../../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../../../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../../../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../../../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../../../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../../../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../../../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../../../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../../../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../../../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../../../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../../../live-auction-house/" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="done" href="../../../live-auction-house/pages/live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="done" href="../../../live-auction-house/pages/live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="done" href="../../" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="done" href="../nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="cur" href="./" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run" aria-current="page">P20·3</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../../../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../../../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../../../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/balajiraghuram92/balajiraghuram92.github.io/tree/main/zips/Code/Capstone-Projects/nova-brown-blog-agent" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://balajiraghuram92.github.io/zips/Code/Zips/nova-brown-blog-agent-code.zip" download>⬇ Download all<small>.zip</small></a></div></div></div>
+<!-- /awsq:bottom -->
+<footer class="wrap">
+  <p>Simulation by Shivank Agarwal, Future with Shivank. The sample files are in <code>brown-writing-agent/inputs/tests/01_sample_context_engineering/</code>. Terminal lines follow the exact formats the Nova client and the Brown CLI print; timestamps, paths and the split of queries across research rounds are illustrative. See <code>docs/solution.html</code> for the full walkthrough.</p>
+</footer>
+
+<script id="sim-data" type="application/json">{"folder": "context_engineering", "scenes": [{"id": "brief", "stage": "brief", "phase": "Brief", "session": "shell", "title": "A human writes the brief", "narr": ["Everything starts with one Markdown file, <code>article_guideline.md<\/code>. This one asks for a lesson on <strong>context engineering<\/strong> of about 3,000 words.", "It has an outline of 8 sections, asks for <strong>5 Mermaid diagrams<\/strong>, and lists <strong>10 sources<\/strong> the author already trusts. It is 4,263 words long.", "The folder holds nothing else yet. Nova and Brown will fill it."], "lines": [{"c": "cmd", "s": "$ ls /Users/you/articles/context_engineering"}, {"c": "out", "s": "article_guideline.md"}], "files": [{"path": "article_guideline.md", "cid": "guide"}], "show": "guide"}, {"id": "n-start", "stage": "n-extract", "phase": "Nova", "session": "nova", "title": "Start Nova, the research agent", "narr": ["The Nova client starts the Nova MCP server inside the same process and asks it what it offers: <strong>12 tools<\/strong>, 1 workflow prompt and 2 resources.", "The client's brain is <strong>Gemini 3.5 Flash<\/strong>. It will read the workflow prompt and decide which tool to call next."], "lines": [{"c": "cmd", "s": "$ cd nova-research-agent/mcp_client && uv run python -m src.client"}, {"c": "info", "s": "2026-11-15 10:41:02.114 | INFO     | logging:callHandlers:1762 | 🚀 Starting MCP client with in-memory transport..."}, {"c": "out", "s": "🛠️  Available tools: 12"}, {"c": "out", "s": "📚 Available resources: 2"}, {"c": "out", "s": "💬 Available prompts: 1"}, {"c": "blank", "s": ""}, {"c": "out", "s": "Available Commands: /tools, /resources, /prompts, /prompt/<name>, /resource/<uri>, /model-thinking-switch, /quit"}], "files": [], "show": "guide"}, {"id": "n-prompt", "stage": "n-extract", "phase": "Nova", "session": "nova", "title": "Load the research workflow", "narr": ["<code>/prompt/full_research_instructions_prompt<\/code> loads the workflow, written in plain English, and sends it to the model.", "The prompt tells the model to explain the steps first and ask for the research folder. Nothing has run yet."], "lines": [{"c": "blank", "s": ""}, {"c": "you", "s": "👤 You: /prompt/full_research_instructions_prompt"}, {"c": "blank", "s": ""}, {"c": "dim", "s": "🤔 LLM's Thoughts:"}, {"c": "dim", "s": "The user loaded the research workflow. I should list the steps and ask for the research directory."}, {"c": "blank", "s": ""}, {"c": "out", "s": "💬 LLM Response: Here is the research workflow:"}, {"c": "out", "s": "1. Extract URLs and local files from the article guideline."}, {"c": "out", "s": "2. Process local files, web pages, GitHub repos and YouTube videos."}, {"c": "out", "s": "3. Run 3 rounds of query generation and web research."}, {"c": "out", "s": "4. Keep only high-quality sources."}, {"c": "out", "s": "5. Pick and fully scrape the most valuable sources."}, {"c": "out", "s": "6. Compile everything into research.md."}, {"c": "out", "s": "Which research directory should I use? Any changes to the workflow?"}], "files": [], "show": "guide"}, {"id": "n-extract", "stage": "n-extract", "phase": "Nova", "session": "nova", "title": "Step 1: read the links in the brief", "narr": ["The model calls <code>extract_guidelines_urls<\/code>. It is plain Python, with no LLM inside: it sorts every link in the brief into four groups.", "Real result for this brief: <em>\"Found 1 GitHub URLs, 0 YouTube videos URLs, 9 other URLs, and 0 local file references.\"<\/em>", "The result is saved in a hidden <code>.nova/<\/code> folder, so every step can be checked or rerun."], "lines": [{"c": "blank", "s": ""}, {"c": "you", "s": "👤 You: The research folder is /Users/you/articles/context_engineering. Run the complete workflow."}, {"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: extract_guidelines_urls"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\"\n}"}, {"c": "tool", "s": "⚡ Executing tool 'extract_guidelines_urls' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}], "files": [{"path": ".nova/guidelines_filenames.json", "cid": "gfn"}], "show": "gfn"}, {"id": "n-ingest", "stage": "n-ingest", "phase": "Nova", "session": "nova", "title": "Step 2: fetch what the brief points to", "narr": ["With no local files and no YouTube links, the model skips those two tools and calls the two that apply.", "<code>scrape_and_clean_other_urls<\/code> scrapes the 9 web links with Firecrawl, 4 at a time, then asks Gemini 3.5 Flash to strip menus and ads from each page.", "<code>process_github_urls<\/code> turns the GitHub file into a Markdown summary with gitingest.", "Real outcome: 7 entries were saved, and one of them is a <code>scraping-failed<\/code> note. A failure on one link does not stop the run."], "lines": [{"c": "blank", "s": ""}, {"c": "dim", "s": "🤔 LLM's Thoughts:"}, {"c": "dim", "s": "There are no local files or YouTube videos, so I will skip those steps and process the web pages and the GitHub link."}, {"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: scrape_and_clean_other_urls"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\"\n}"}, {"c": "tool", "s": "⚡ Executing tool 'scrape_and_clean_other_urls' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}, {"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: process_github_urls"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\"\n}"}, {"c": "tool", "s": "⚡ Executing tool 'process_github_urls' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}], "files": [{"path": ".nova/urls_from_guidelines/context-engineering-a-guide-with-examples-datacamp.md", "cid": "page:context-engineering-a-guide-with-examples-datacamp"}, {"path": ".nova/urls_from_guidelines/context-engineering-guide-by-elvis-ai-newsletter.md", "cid": "page:context-engineering-guide-by-elvis-ai-newsletter"}, {"path": ".nova/urls_from_guidelines/context-engineering-what-it-is-and-techniques-to-consider-ll.md", "cid": "page:context-engineering-what-it-is-and-techniques-to-consider-ll"}, {"path": ".nova/urls_from_guidelines/context-engineering.md", "cid": "page:context-engineering"}, {"path": ".nova/urls_from_guidelines/scraping-failed.md", "cid": "page:scraping-failed"}, {"path": ".nova/urls_from_guidelines/the-rise-of-context-engineering.md", "cid": "page:the-rise-of-context-engineering"}, {"path": ".nova/urls_from_guidelines/what-is-context-engineering-pinecone.md", "cid": "page:what-is-context-engineering-pinecone"}, {"path": ".nova/urls_from_guidelines_code/factor-03-own-your-context-window.md", "cid": "code"}], "show": "page:what-is-context-engineering-pinecone"}, {"id": "n-r1", "stage": "n-research", "phase": "Nova", "session": "nova", "title": "Step 3: research loop, round 1", "narr": ["<code>generate_next_queries<\/code> compares the brief with everything collected so far and asks <strong>Gemini 2.5 Pro<\/strong> for 5 questions that fill the gaps, each with a reason.", "<code>run_web_research<\/code> sends them to <strong>Perplexity<\/strong>. Each answer comes back with its sources, numbered and appended to <code>perplexity_results.md<\/code>."], "lines": [{"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: generate_next_queries"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\",\n  \"n_queries\": 5\n}"}, {"c": "tool", "s": "⚡ Executing tool 'generate_next_queries' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}, {"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: run_web_research"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\",\n  \"queries\": [\n    \"What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?\",\n    \"What are the best practices for structuring and formatting different types of context, such as using XML or YAML, to optimize LLM performance?\",\n    \"What are the latest benchmarks and studies on the \\\"lost-in-the-middle\\\" problem and how do different context engineering strategies mitigate it?\",\n    \"What are some real-world case studies or examples of using a multi-agent architecture, like the orchestrator-worker pattern, to isolate context?\",\n    \"How do different memory types (procedural, episodic, semantic) map to the components of an LLM's context, and what are the common architectural patterns for managing them?\"\n  ]\n}"}, {"c": "tool", "s": "⚡ Executing tool 'run_web_research' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}], "files": [{"path": ".nova/next_queries.md", "cid": "nq1"}, {"path": ".nova/perplexity_results.md", "cid": "pplx"}], "show": "nq1"}, {"id": "n-r2", "stage": "n-research", "phase": "Nova", "session": "nova", "title": "Step 3: research loop, round 2", "narr": ["Round 2 sees round 1's answers, so its questions go deeper: compression, context drift, tool overload.", "<code>next_queries.md<\/code> is overwritten each round; <code>perplexity_results.md<\/code> keeps growing."], "lines": [{"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: generate_next_queries"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\",\n  \"n_queries\": 5\n}"}, {"c": "tool", "s": "⚡ Executing tool 'generate_next_queries' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}, {"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: run_web_research"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\",\n  \"queries\": [\n    \"What are some detailed case studies or architectural blueprints for implementing context engineering in enterprise AI applications, particularly in healthcare or financial services?\",\n    \"What are the most effective techniques for context compression in large language models, including summarization, deduplication, and moving working memory to long-term memory?\",\n    \"How is 'context drift' defined in AI systems, and what are the primary strategies to manage or mitigate conflicting information over time in an LLM's context?\",\n    \"How does context engineering integrate with the broader roles of software engineering, data engineering, and MLOps in production AI systems?\",\n    \"What are the best practices for managing and selecting from a large number of tools (100+) in an AI agent to avoid 'tool confusion' and optimize performance?\"\n  ]\n}"}, {"c": "tool", "s": "⚡ Executing tool 'run_web_research' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}], "files": [{"path": ".nova/next_queries.md", "cid": "nq2"}, {"path": ".nova/perplexity_results.md", "cid": "pplx"}], "show": "nq2"}, {"id": "n-r3", "stage": "n-research", "phase": "Nova", "session": "nova", "title": "Step 3: research loop, round 3", "narr": ["Round 3 closes the last gaps, such as industry case studies and benchmarks.", "Across the three rounds, <code>research.md<\/code> ends up with <strong>14 query groups<\/strong>. The split into rounds shown here is for illustration; the queries themselves are real."], "lines": [{"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: generate_next_queries"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\",\n  \"n_queries\": 5\n}"}, {"c": "tool", "s": "⚡ Executing tool 'generate_next_queries' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}, {"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: run_web_research"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\",\n  \"queries\": [\n    \"What are the primary trade-offs between context engineering and model fine-tuning in terms of cost, development speed, and adaptability for enterprise AI applications?\",\n    \"What are the most effective strategies for managing 'tool confusion' in AI agents when the number of available tools is large, specifically regarding tool description optimization and dynamic selection?\",\n    \"Can you provide detailed architectural blueprints or case studies for implementing context engineering in the financial services or healthcare sectors?\",\n    \"What are the latest research findings and benchmarks on the 'lost-in-the-middle' problem, and how do techniques like instruction repetition and context reordering mitigate it?\",\n    \"…\"\n  ]\n}"}, {"c": "tool", "s": "⚡ Executing tool 'run_web_research' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}], "files": [{"path": ".nova/next_queries.md", "cid": "nq3"}, {"path": ".nova/perplexity_results.md", "cid": "pplx"}], "show": "nq3"}, {"id": "n-filter", "stage": "n-filter", "phase": "Nova", "session": "nova", "title": "Step 4: keep only good sources", "narr": ["<code>select_research_sources_to_keep<\/code> asks Gemini 3.5 Flash to score every source for trust, authority and relevance to the brief.", "Real result: <strong>52 sources<\/strong> survive, from official docs, research papers and engineering blogs. Their IDs go into one file and their full text into another."], "lines": [{"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: select_research_sources_to_keep"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\"\n}"}, {"c": "tool", "s": "⚡ Executing tool 'select_research_sources_to_keep' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}], "files": [{"path": ".nova/perplexity_sources_selected.md", "cid": "sel_ids"}, {"path": ".nova/perplexity_results_selected.md", "cid": "sel_res"}], "show": "sel_ids"}, {"id": "n-scrape", "stage": "n-scrape", "phase": "Nova", "session": "nova", "title": "Step 5: read the best sources in full", "narr": ["Search answers are summaries. <code>select_research_sources_to_scrape<\/code> picks up to <strong>5<\/strong> sources worth reading completely, and <code>scrape_research_urls<\/code> scrapes and cleans them.", "Real outcome: 4 pages came back, including an Azure guide to agent orchestration and a survey on memory. One PDF timed out after 3 attempts. The run carries on, because only a total failure stops the workflow."], "lines": [{"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: select_research_sources_to_scrape"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\",\n  \"max_sources\": 5\n}"}, {"c": "tool", "s": "⚡ Executing tool 'select_research_sources_to_scrape' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}, {"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: scrape_research_urls"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\"\n}"}, {"c": "tool", "s": "⚡ Executing tool 'scrape_research_urls' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}], "files": [{"path": ".nova/urls_to_scrape_from_research.md", "cid": "to_scrape"}, {"path": ".nova/urls_from_research/", "cid": "deep"}], "show": "deep"}, {"id": "n-compile", "stage": "n-compile", "phase": "Nova", "session": "nova", "title": "Step 6: write research.md", "narr": ["<code>create_research_file<\/code> combines everything into one file with five sections: search results, fully scraped sources, code sources, YouTube transcripts and the pages from the brief.", "Every block keeps its URL, so Brown can cite it and a human can check it. The final file is <strong>39,322 words<\/strong>."], "lines": [{"c": "blank", "s": ""}, {"c": "tool", "s": "🔧 Function Call (Tool):"}, {"c": "tool", "s": "  Tool: create_research_file"}, {"c": "tool", "s": "  Arguments: {\n  \"research_directory\": \"/Users/you/articles/context_engineering\"\n}"}, {"c": "tool", "s": "⚡ Executing tool 'create_research_file' via MCP server..."}, {"c": "ok", "s": "✅ Tool execution successful!"}, {"c": "blank", "s": ""}, {"c": "out", "s": "💬 LLM Response: The research workflow is complete. research.md is in the research folder. Note: 1 of the 5 selected sources"}, {"c": "out", "s": "could not be scraped (aclanthology.org timed out after 3 attempts); everything else succeeded."}, {"c": "blank", "s": ""}, {"c": "you", "s": "👤 You: /quit"}, {"c": "info", "s": "2026-11-15 10:56:47.902 | INFO     | logging:callHandlers:1762 | 👋 Terminating application..."}], "files": [{"path": "research.md", "cid": "research"}], "show": "research"}, {"id": "handoff", "stage": "research", "phase": "Hand-off", "session": "nova", "title": "The hand-off is a file", "narr": ["Nova's job ends here. Brown never talks to Nova: it only reads <code>research.md<\/code> from the same folder.", "This is the best moment for a human check. Open <code>research.md<\/code>, delete a weak source or add a missing one, then start Brown."], "lines": [], "files": [], "show": "research"}, {"id": "b-load", "stage": "b-load", "phase": "Brown", "session": "brown", "title": "Start Brown, the writing agent", "narr": ["Brown runs as a fixed LangGraph workflow, not a free agent. Every step below is a <code>@task<\/code> that retries up to 3 times.", "First it loads the context: the brief, the research, six writing profiles (one of them is the author persona) and two example articles for style.", "This sample has two review rounds on disk, so the simulation runs with <code>num_reviews: 2<\/code>. The default config uses 3."], "lines": [{"c": "cmd", "s": "$ cd brown-writing-agent"}, {"c": "cmd", "s": "$ make brown-generate-article DIR_PATH=/Users/you/articles/context_engineering"}, {"c": "out", "s": "uv run python scripts/brown_mcp_cli.py generate-article --dir-path /Users/you/articles/context_engineering"}, {"c": "info", "s": "2026-11-15 10:58:40.512 | INFO     | brown.mcp.server:<module>:35 - Initializing Brown MCP Server..."}, {"c": "info", "s": "2026-11-15 10:58:40.516 | INFO     | brown.mcp.server:<module>:37 - Brown MCP Server initialized successfully"}, {"c": "info", "s": "2026-11-15 10:58:40.523 | INFO     | __main__:generate_article:58 - Starting article generation for directory: /Users/you/articles/context_engineering"}, {"c": "info", "s": "INFO     Server log: 0%: Loading context"}, {"c": "info", "s": "INFO     Server log: 2%: Loaded context"}], "files": [], "show": "context"}, {"id": "b-media", "stage": "b-media", "phase": "Brown", "session": "brown", "title": "Draw the diagrams first", "narr": ["The media node reads the brief, finds the <strong>5 diagram requests<\/strong>, and calls the Mermaid tool once for each. All 5 run in parallel.", "Diagrams are made before writing so the writer can place them in the right sections. The preview shows the first one, exactly as it appears in the final article."], "lines": [{"c": "info", "s": "INFO     Server log: 3%: Generating media items"}, {"c": "info", "s": "INFO     Server log: Found 5 media items to generate using the following tool configurations:"}, {"c": "info", "s": "INFO     Server log:   • Tool 1: mermaid_diagram_generator_tool - A flowchart illustrating the decision-making workflow for choosing bet…"}, {"c": "info", "s": "INFO     Server log:   • Tool 2: mermaid_diagram_generator_tool - A flowchart illustrating the high-level workflow of how context is bui…"}, {"c": "info", "s": "INFO     Server log:   • Tool 3: mermaid_diagram_generator_tool - An architecture diagram illustrating how various context optimization …"}, {"c": "info", "s": "INFO     Server log:   • Tool 4: mermaid_diagram_generator_tool - A flowchart demonstrating context compression strategies, including me…"}, {"c": "info", "s": "INFO     Server log:   • Tool 5: mermaid_diagram_generator_tool - Diagram illustrating the orchestrator-worker pattern for isolating con…"}, {"c": "info", "s": "INFO     Server log: Executing 5 media item generation jobs in parallel."}, {"c": "info", "s": "INFO     Server log: Generated 5 media items."}, {"c": "info", "s": "INFO     Server log: 10%: Generated media items"}], "files": [], "show": "media"}, {"id": "b-draft", "stage": "b-draft", "phase": "Brown", "session": "brown", "title": "Write the first draft", "narr": ["The writer (Gemini 3.5 Flash, medium thinking) gets everything at once: the brief, the research, the profiles, the diagrams and the examples. Image links found in the research are sent along as pictures.", "Real result: <code>article_000.md<\/code>, <strong>4,337 words<\/strong>, 8 sections, 5 diagrams and 17 references."], "lines": [{"c": "info", "s": "INFO     Server log: 15%: Writing article"}, {"c": "info", "s": "INFO     Server log: 20%: Written raw article"}, {"c": "info", "s": "INFO     Server log: 25%: Rendered raw article to `/Users/you/articles/context_engineering/article_000.md`"}], "files": [{"path": "article_000.md", "cid": "a0"}], "show": "a0"}, {"id": "b-rev1", "stage": "b-review", "phase": "Review", "session": "brown", "title": "Review, round 1", "narr": ["A separate reviewer call (temperature 0, high thinking) compares the draft with the brief and all six profiles. It must return at most 5 reviews, each naming a profile, a location and a problem.", "Brown does not save reviews, so the ones in the preview are reconstructed from what actually changed in the next version."], "lines": [{"c": "info", "s": "INFO     Server log: 37%: Reviewing article [Iteration 1 / 2]"}, {"c": "info", "s": "INFO     Server log: 37%: Generated reviews"}], "files": [], "show": "reviews1"}, {"id": "b-edit1", "stage": "b-edit", "phase": "Brown", "session": "brown", "title": "Edit, round 1", "narr": ["The editor rewrites the article with the reviews in its context and saves <code>article_001.md<\/code>. The draft stays on disk, so you can compare.", "Real changes: a heading for the introduction, a direct sentence instead of a stock transition, filler removed, and an unsupported date fixed. 4,337 words became 4,438."], "lines": [{"c": "info", "s": "INFO     Server log: 50%: Editing article"}, {"c": "info", "s": "INFO     Server log: 50%: Edited article"}, {"c": "info", "s": "INFO     Server log: 62%: Rendered article to `/Users/you/articles/context_engineering/article_001.md`"}], "files": [{"path": "article_001.md", "cid": "a1"}], "show": "a1"}, {"id": "b-rev2", "stage": "b-review", "phase": "Review", "session": "brown", "title": "Review, round 2", "narr": ["The reviewer looks again. The big problems are gone, so this round's comments are smaller: voice, sentence length, tone.", "If the reviewer returned no reviews at all, Brown would stop here and skip the edit."], "lines": [{"c": "info", "s": "INFO     Server log: 75%: Reviewing article [Iteration 2 / 2]"}, {"c": "info", "s": "INFO     Server log: 75%: Generated reviews"}], "files": [], "show": "reviews2"}, {"id": "b-edit2", "stage": "b-edit", "phase": "Brown", "session": "brown", "title": "Edit, round 2, and save", "narr": ["The second edit polishes wording: \"Let's\" becomes \"we will\", a long sentence is split, and a preachy line is softened. 4,438 words became 4,449.", "The last version is saved twice: as <code>article_002.md<\/code> and as the final <code>article.md<\/code>."], "lines": [{"c": "info", "s": "INFO     Server log: 87%: Editing article"}, {"c": "info", "s": "INFO     Server log: 87%: Edited article"}, {"c": "info", "s": "INFO     Server log: 99%: Rendered article to `/Users/you/articles/context_engineering/article_002.md`"}, {"c": "info", "s": "INFO     Server log: 100%: Final article rendered to `/Users/you/articles/context_engineering/article.md`"}, {"c": "info", "s": "INFO     Server log: Final article rendered to `/Users/you/articles/context_engineering/article.md`."}, {"c": "ok", "s": "2026-11-15 11:03:12.307 | SUCCESS  | __main__:generate_article:63 - Article generation completed successfully"}, {"c": "info", "s": "2026-11-15 11:03:12.307 | INFO     | __main__:generate_article:64 - Generated article content:"}, {"c": "out", "s": "Article generation completed successfully!"}], "files": [{"path": "article_002.md", "cid": "a2"}, {"path": "article.md", "cid": "final"}], "show": "a2"}, {"id": "final", "stage": "article", "phase": "Done", "session": "brown", "title": "The finished article", "narr": ["<code>article.md<\/code>: 4,449 words, 8 sections plus references, 5 Mermaid diagrams, 1 image from the research and 17 references.", "Every claim can be traced back to a numbered source, and every source back to <code>research.md<\/code>.", "A human still reads it before publishing. That review now takes an hour, not three days."], "lines": [{"c": "blank", "s": ""}, {"c": "cmd", "s": "$ cd /Users/you/articles/context_engineering && ls -1"}, {"c": "out", "s": "article.md"}, {"c": "out", "s": "article_000.md"}, {"c": "out", "s": "article_001.md"}, {"c": "out", "s": "article_002.md"}, {"c": "out", "s": "article_guideline.md"}, {"c": "out", "s": "research.md"}, {"c": "cmd", "s": "$ ls -1 .nova"}, {"c": "out", "s": "guidelines_filenames.json"}, {"c": "out", "s": "next_queries.md"}, {"c": "out", "s": "perplexity_results.md"}, {"c": "out", "s": "perplexity_results_selected.md"}, {"c": "out", "s": "perplexity_sources_selected.md"}, {"c": "out", "s": "urls_from_guidelines"}, {"c": "out", "s": "urls_from_guidelines_code"}, {"c": "out", "s": "urls_from_research"}, {"c": "out", "s": "urls_to_scrape_from_research.md"}], "files": [], "show": "final", "extra": "stats"}, {"id": "next", "stage": "article", "phase": "Done", "session": "brown", "title": "What to try next", "narr": ["Run Brown on this same sample with your key and compare your <code>article_000.md<\/code> with the one in the project. LLM output varies, so the wording will differ, but the steps and files will be the same.", "Then try a targeted edit with <code>make brown-edit-article<\/code>, or run Nova and Brown together through the composed server."], "lines": [], "files": [], "show": "next"}], "content": {"guide": {"type": "text", "title": "article_guideline.md", "body": "## Global Context of the Lesson\n\n### What We Are Planning to Share\n\nWe will write a lesson on context engineering, the core foundation of AI engineering and building AI applications. We will start by explaining why pr…\n\n### Why We Think It's Valuable\n\nContext engineering is the new fine-tuning. As fine-tuning is required less and less due to the fact that it is expensive, slow, and extremely inflex…\n\n### Expected Length of the Lesson\n**3000 words** (without the titles and references), where we assume that 200-250 words ≈ 1 minute of reading time.\n\n### Theory / Practice Ratio\n\n70% theory - 30% real-world examples\n\n…\n\n\n1. When prompt engineering breaks\n2. From prompt to context engineering\n3. Understanding context engineering\n4. What makes up the context\n5. Production implementation challenges \n6. Key strategies for context optimization\n7. Here is an example\n8. Connecting context engineering to AI engineering\n\n…\n\n## Golden Sources\n\n1. [Context Engineering](https://blog.langchain.com/context-engineering-for-agents/)\n2. [Context Engineering - What it is, and techniques to consider](https://www.llamaindex.ai/blog/context-engineering-what-it-is-and-techniques-to-con…\n3. [The rise of \"context engineering\"](https://blog.langchain.com/the-rise-of-context-engineering/)\n4. [Context Engineering: A Guide With Examples](https://www.datacamp.com/blog/context-engineering)\n5. [A Survey of Context Engineering for Large Language Models](https://arxiv.org/pdf/2507.13334)\n\n## Other Sources\n\n1. [+1 for \"context engineering\" over \"prompt engineering\".](https://x.com/karpathy/status/1937902205765607626)\n2. [Context Engineering 101 cheat sheet](https://x.com/lenadroid/status/1943685060785524824)\n3. [Own your context window](https://github.com/humanlayer/12-factor-agents/blob/main/content/factor-03-own-your-context-window.md)\n4. [Context Engineering Guide](https://nlp.elvissaravia.com/p/context-engineering-guide)\n5. [What is Context Engineering?](https://www.pinecone.io/learn/context-engineering/)", "label": "Real file (excerpt)", "kind": "real"}, "gfn": {"type": "text", "title": ".nova/guidelines_filenames.json", "body": "{\n  \"github_urls\": [\n    \"https://github.com/humanlayer/12-factor-agents/blob/main/content/factor-03-own-your-context-window.md\"\n  ],\n  \"youtube_videos_urls\": [],\n  \"other_urls\": [\n    \"https://blog.langchain.com/context-engineering-for-agents/\",\n    \"https://www.llamaindex.ai/blog/context-engineering-what-it-is-and-techniques-to-consider\",\n    \"https://blog.langchain.com/the-rise-of-context-engineering/\",\n    \"https://www.datacamp.com/blog/context-engineering\",\n    \"https://arxiv.org/pdf/2507.13334\",\n    \"https://x.com/karpathy/status/1937902205765607626\",\n    \"https://x.com/lenadroid/status/1943685060785524824\",\n    \"https://nlp.elvissaravia.com/p/context-engineering-guide\",\n    \"https://www.pinecone.io/learn/context-engineering/\"\n  ],\n  \"local_file_paths\": []\n}", "label": "Real output of the tool on this guideline", "kind": "real"}, "page:context-engineering-a-guide-with-examples-datacamp": {"type": "text", "title": ".nova/urls_from_guidelines/context-engineering-a-guide-with-examples-datacamp.md", "body": "You may be a master prompt engineer, but as the conversation goes on, your chatbot often forgets the earliest and most important pieces of your instr…\n\nAs AI use cases grow more complex, writing a clever prompt is just one small part of a much larger challenge: **context engineerin** **g**.\n\nIn this tutorial, I will explain what context engineering is, how it works, when to use it instead of regular prompt engineering, and the practical t…\n\n## What Is Context Engineering?", "label": "Real cleaned page (excerpt, from research.md)", "kind": "real"}, "page:context-engineering-guide-by-elvis-ai-newsletter": {"type": "text", "title": ".nova/urls_from_guidelines/context-engineering-guide-by-elvis-ai-newsletter.md", "body": "A few years ago, many, even top AI researchers, claimed that prompt engineering would be dead by now.\n\nObviously, they were very wrong, and in fact, prompt engineering is now even more important than ever. It is so important that it is now being rebran…\n\nYes, another fancy term to describe the important process of tuning the instructions and relevant context that an LLM needs to perform its tasks effe…\n\nMuch has been written already about context engineering ( [Ankur Goyal](https://x.com/ankrgyl/status/1913766591910842619), [Walden Yan](https://cogni…", "label": "Real cleaned page (excerpt, from research.md)", "kind": "real"}, "page:context-engineering-what-it-is-and-techniques-to-consider-ll": {"type": "text", "title": ".nova/urls_from_guidelines/context-engineering-what-it-is-and-techniques-to-consider-ll.md", "body": "Although the principles behind the term ‘context engineering’ are not new, the wording is a useful abstraction that allows us to reason about the mos…\n\n### What is Context Engineering\n\nAI agents require the relevant context for a task, to perform that task in a reasonable way. We’ve known this for a while, but given the speed and fr…\n\n[Andrey Karpathy’s post](https://x.com/karpathy/status/1937902205765607626) about this is a great summary:", "label": "Real cleaned page (excerpt, from research.md)", "kind": "real"}, "page:context-engineering": {"type": "text", "title": ".nova/urls_from_guidelines/context-engineering.md", "body": "As Andrej Karpathy puts it, LLMs are like a [new kind of operating system](https://www.youtube.com/watch?si=-aKY-x57ILAmWTdw&t=620&v=LCEmiRjPEtQ&feat…\n\n> _\\[Context engineering is the\\] ”…delicate art and science of filling the context window with just the right information for the next step.”_https:…\n\nWhat are the types of context that we need to manage when building LLM applications? Context engineering as an [umbrella](https://x.com/dexhorthy/sta…\n\n- **Instructions** – prompts, memories, few‑shot examples, tool descriptions, etc\n- **Knowledge** – facts, memories, etc", "label": "Real cleaned page (excerpt, from research.md)", "kind": "real"}, "page:scraping-failed": {"type": "text", "title": ".nova/urls_from_guidelines/scraping-failed.md", "body": "⚠️ Error scraping https://arxiv.org/pdf/2507.13334 after 3 attempts: Request Timeout: Failed to make POST request as the request timed out. Request t…\n\n<\/details>\n\n<details>\n<summary>the-rise-of-context-engineering<\/summary>\n\nContext engineering is building dynamic systems to provide the right information and tools in the right format such that the LLM can plausibly accomp…", "label": "Real cleaned page (excerpt, from research.md)", "kind": "real"}, "page:the-rise-of-context-engineering": {"type": "text", "title": ".nova/urls_from_guidelines/the-rise-of-context-engineering.md", "body": "Context engineering is building dynamic systems to provide the right information and tools in the right format such that the LLM can plausibly accomp…\n\nMost of the time when an agent is not performing reliably the underlying cause is that the appropriate context, instructions and tools have not been …\n\nLLM applications are evolving from single prompts to more complex, dynamic agentic systems. As such, context engineering is becoming the [most import…\n\n## What is context engineering?", "label": "Real cleaned page (excerpt, from research.md)", "kind": "real"}, "page:what-is-context-engineering-pinecone": {"type": "text", "title": ".nova/urls_from_guidelines/what-is-context-engineering-pinecone.md", "body": "LLMs are getting better, faster, and smarter, and as they do, we need new ways to use them.\n\nApplications people build with them have transitioned from asking LLMs to write to letting LLMs drive actions. With that, comes new challenges in dev…\n\n**Context engineering** is a term that attempts to describe the architecting necessary to support building accurate LLM applications. But what does c…\n\n## Hallucinations Constrain AI Applications", "label": "Real cleaned page (excerpt, from research.md)", "kind": "real"}, "code": {"type": "text", "title": ".nova/urls_from_guidelines_code/factor-03-own-your-context-window.md", "body": "# Repository analysis for https://github.com/humanlayer/12-factor-agents/blob/main/content/factor-03-own-your-context-window.md\n\n## Summary\nRepository: humanlayer/12-factor-agents\nFile: factor-03-own-your-context-window.md\nLines: 260\n\nEstimated tokens: 2.5k\n\n## File tree\n```Directory structure:\n└── factor-03-own-your-context-window.md", "label": "Real repo summary (excerpt, from research.md)", "kind": "real"}, "nq1": {"type": "text", "title": ".nova/next_queries.md", "body": "### Candidate Web-Search Queries\n\n1. What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n2. What are the best practices for structuring and formatting different types of context, such as using XML or YAML, to optimize LLM performance?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n3. What are the latest benchmarks and studies on the \"lost-in-the-middle\" problem and how do different context engineering strategies mitigate it?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n4. What are some real-world case studies or examples of using a multi-agent architecture, like the orchestrator-worker pattern, to isolate context?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n5. How do different memory types (procedural, episodic, semantic) map to the components of an LLM's context, and what are the common architectural patterns for managing them?\nReason: (one line from the model explaining which gap in the research this query fills)", "label": "Queries are real (they appear in research.md); the round split is illustrative", "kind": "mixed"}, "nq2": {"type": "text", "title": ".nova/next_queries.md", "body": "### Candidate Web-Search Queries\n\n1. What are some detailed case studies or architectural blueprints for implementing context engineering in enterprise AI applications, particularly in healthcare or financial services?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n2. What are the most effective techniques for context compression in large language models, including summarization, deduplication, and moving working memory to long-term memory?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n3. How is 'context drift' defined in AI systems, and what are the primary strategies to manage or mitigate conflicting information over time in an LLM's context?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n4. How does context engineering integrate with the broader roles of software engineering, data engineering, and MLOps in production AI systems?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n5. What are the best practices for managing and selecting from a large number of tools (100+) in an AI agent to avoid 'tool confusion' and optimize performance?\nReason: (one line from the model explaining which gap in the research this query fills)", "label": "Queries are real (they appear in research.md); the round split is illustrative", "kind": "mixed"}, "nq3": {"type": "text", "title": ".nova/next_queries.md", "body": "### Candidate Web-Search Queries\n\n1. What are the primary trade-offs between context engineering and model fine-tuning in terms of cost, development speed, and adaptability for enterprise AI applications?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n2. What are the most effective strategies for managing 'tool confusion' in AI agents when the number of available tools is large, specifically regarding tool description optimization and dynamic selection?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n3. Can you provide detailed architectural blueprints or case studies for implementing context engineering in the financial services or healthcare sectors?\nReason: (one line from the model explaining which gap in the research this query fills)\n\n4. What are the latest research findings and benchmarks on the 'lost-in-the-middle' problem, and how do techniques like instruction repetition and context reordering mitigate it?\nReason: (one line from the model explaining which gap in the research this query fills)", "label": "Queries are real (they appear in research.md); the round split is illustrative", "kind": "mixed"}, "pplx": {"type": "text", "title": ".nova/perplexity_results.md", "body": "\n### Source [1]: https://huggingface.co/papers/2507.13334\n\nQuery: What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?\n\nAnswer: Context engineering is presented as a systematic discipline focused on optimizing the information provided to large language models (LLMs), m…\n\n-----\n\n-----\n\n-----\n\n### Source [2]: https://arize.com/docs/phoenix/learn/context-engineering/context-engineering-concepts\n\nQuery: What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?", "label": "Real search results (excerpt)", "kind": "real"}, "sel_ids": {"type": "text", "title": ".nova/perplexity_sources_selected.md", "body": "1,2,3,4,5,7,8,9,12,13,14,15,16,17,18,20,21,22,23,24,27,28,31,32,33,34,35,36,58,59,60,61,37,38,39,40,41,42,43,44,45,46,47,49,50,51,52,53,54,55,56,57", "label": "Real: the 52 source IDs that appear in research.md", "kind": "real"}, "sel_res": {"type": "text", "title": ".nova/perplexity_results_selected.md", "body": "<details>\n<summary>What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?<\/summary>\n\n### Source [1]: https://huggingface.co/papers/2507.13334\n\nQuery: What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?\n\nAnswer: Context engineering is presented as a systematic discipline focused on optimizing the information provided to large language models (LLMs), m…\n\n-----\n\n-----\n\n-----\n\n### Source [2]: https://arize.com/docs/phoenix/learn/context-engineering/context-engineering-concepts\n\nQuery: What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?", "label": "Real kept results (excerpt)", "kind": "real"}, "to_scrape": {"type": "text", "title": ".nova/urls_to_scrape_from_research.md", "body": "One URL per line, chosen by the model (up to 5).\n\nIn this run 5 sources were chosen. One of them,\nhttps://aclanthology.org/2024.findings-emnlp.138.pdf,\nlater failed to scrape.", "label": "Summary of the file", "kind": "mixed"}, "deep": {"type": "text", "title": ".nova/urls_from_research/", "body": "1. As architects and developers design their workload to take full advantage of language model capabilities, AI a…\n\n2. We’ve spent two years teaching everyone about “prompt engineering,” which has been great. But crafting clever …\n\n3. In neuroscience, human memory refers to the brain’s ability to store, retain, and recall information \\[ [9](ht…\n\n4. ⚠️ Error scraping https://aclanthology.org/2024.findings-emnlp.138.pdf after 3 attempts: Request Timeout: Failed to make POST request as the request timed out. Request timed out - No additional error details provided.\n\n5. Despite the significant advancement in large language models (LLMs), LLMs often need help with long contexts, …", "label": "Real: first line of each fully scraped source, as it appears in research.md", "kind": "real"}, "research": {"type": "text", "title": "research.md", "body": "# Research\n\n## Research Results\n\n<details>\n<summary>What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?<\/summary>\n\n### Source [1]: https://huggingface.co/papers/2507.13334\n\nQuery: What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?\n\nAnswer: Context engineering is presented as a systematic discipline focused on optimizing the information provided to large language models (LLMs), m…\n\n-----\n\n-----\n\n-----\n\n### Source [2]: https://arize.com/docs/phoenix/learn/context-engineering/context-engineering-concepts\n\nQuery: What is the relationship between context engineering and fine-tuning in large language models, and how do you decide which to use?\n\nAnswer: Context engineering is defined as selecting, organizing, and framing the information that an LLM should process for a given task. This includ…\n\n…\n\n## Sources Scraped From Research Results\n## Code Sources\n## YouTube Video Transcripts\n## Additional Sources Scraped", "label": "Real file (excerpt)", "kind": "real"}, "char": {"type": "text", "title": "inputs/profiles/character_profiles/shivank_agarwal.md", "body": "## About Shivank Agarwal\n\nI’m **Shivank Agarwal**, Head of AI and FDE (Forward Deployed Engineering) Leader at Scaler, based in Bangalore.\n\nI help software engineers become AI engineers who ship real products.\n\nI lead engineering and data science teams, design AI curricula, and run enterprise AI engagements where agents and LLM systems have to work…\n\nI teach under the name **Future with Shivank**. My goal is simple: take engineers from \"I can call an LLM API\" to \"I can design, build, eva…", "label": "Real profile (excerpt)", "kind": "real"}, "a0": {"type": "text", "title": "article_000.md", "body": "# Lesson 3: Context Engineering\n### The Core Skill for Building Production-Ready AI\n\nAI applications have evolved rapidly. In 2022, we had simple chatbots for question-answering. By 2023, Retrieval-Augmented Generation (RAG) systems c…\n\nIn our last lesson, we explored how to choose between AI agents and LLM workflows when designing a system. As these applications grow more complex, p…\n\n## From Prompt to Context Engineering\n\nPrompt engineering, while effective for simple tasks, is designed for single, stateless interactions. It treats each call to an LLM as a new, isolate…\n\nAs a conversation or task progresses, the context grows. Without a strategy to manage this growth, the LLM’s performance degrades. This is context de…\n\nEven with large context windows, a physical limit exists for what you can include. Also, on the operational side, every token adds to the cost and la…", "label": "Real first draft (excerpt)", "kind": "real"}, "final": {"type": "text", "title": "article.md", "body": "# Lesson 3: Context Engineering\n### The Core Skill for Building Production-Ready AI\n\n## When prompt engineering breaks\n\nAI applications have evolved rapidly. In 2022, we had simple chatbots for question-answering. By 2023, Retrieval-Augmented Generation (RAG) systems c…\n\nIn our last lesson, we explored how to choose between AI agents and LLM workflows when designing a system. As these applications grow more complex, p…\n\nThe sheer volume of information an agent might need has grown exponentially. This includes past conversations, user data, documents, and action descr…\n\n## From Prompt to Context Engineering\n\n…\n\n## When prompt engineering breaks\n## From Prompt to Context Engineering\n## Understanding Context Engineering\n## What Makes Up the Context\n## Production Implementation Challenges\n## Key Strategies for Context Optimization\n## Here is an example\n## Connecting context engineering to AI engineering\n## References\n\n…\n\n1.  Osmani, A. (n.d.). Context Engineering: Bringing engineering discipline to prompts. Elevate. [https://addyo.substack.com/p/context-engineering-bringing-eng…\n2.  Muntean, A. (n.d.). Your AI doesn't need more Training—It needs context. Tabnine. [https://www.tabnine.com/blog/your-ai-doesnt-need-more-training-it-needs-…\n3.  (n.d.). Fine-Tuning vs. Prompt Engineering: A Decision Framework for Enterprise AI | Tribe AI. Tribe AI. [https://www.tribe.ai/applied-ai/fine-tuning-vs-pr…\n4.  (n.d.). From Human Memory to AI Memory: A survey on Memory Mechanisms in the Era of LLMS. arXiv. [https://arxiv.org/html/2504.15965v1](https://arxiv.org/ht…\n5.  humanlayer. (n.d.). 12-factor-agents/content/factor-03-own-your-context-window.md at main · humanlayer/12-factor-agents. GitHub. [https://github.com/humanl…", "label": "Real final article (excerpt)", "kind": "real"}, "reviews1": {"type": "text", "title": "Reviews, round 1", "label": "Reconstructed from what changed between article_000.md and article_001.md. Brown does not save reviews to disk.", "kind": "mixed", "body": "{\n  \"reviews\": [\n    {\n      \"profile\": \"structure\",\n      \"location\": \"Introduction\",\n      \"comment\": \"The introduction has no ## heading. Add a short H2 title above the opening paragraphs.\"\n    },\n    {\n      \"profile\": \"terminology\",\n      \"location\": \"Introduction - third paragraph\",\n      \"comment\": \"'This is where context engineering becomes essential' is a stock transition. State the problem directly.\"\n    },\n    {\n      \"profile\": \"terminology\",\n      \"location\": \"Conclusion\",\n      \"comment\": \"'We like to say that' is filler. Start the sentence with the point.\"\n    },\n    {\n      \"profile\": \"article\",\n      \"location\": \"References\",\n      \"comment\": \"Reference 1 has a date that is not in the research. Use (n.d.) when the date is unknown.\"\n    }\n  ]\n}"}, "reviews2": {"type": "text", "title": "Reviews, round 2", "label": "Reconstructed from what changed between article_001.md and article_002.md. Brown does not save reviews to disk.", "kind": "mixed", "body": "{\n  \"reviews\": [\n    {\n      \"profile\": \"mechanics\",\n      \"location\": \"Introduction - second paragraph\",\n      \"comment\": \"One sentence carries a long dash-separated list. Split it, and keep paragraphs under 80 words.\"\n    },\n    {\n      \"profile\": \"mechanics\",\n      \"location\": \"Production Implementation Challenges\",\n      \"comment\": \"'Let's look at' switches voice. Use 'we will' for the team, as the point-of-view rule says.\"\n    },\n    {\n      \"profile\": \"tonality\",\n      \"location\": \"Conclusion\",\n      \"comment\": \"'We should all think in systems' sounds preachy. Rephrase as a plain statement.\"\n    }\n  ]\n}"}, "a1": {"type": "diff", "title": "article_001.md", "label": "Real changes: article_000.md compared with article_001.md", "kind": "real", "pairs": [{"where": "Opening of the article", "before": "# Lesson 3: Context Engineering\n### The Core Skill for Building Production-Ready AI\n", "after": "# Lesson 3: Context Engineering\n### The Core Skill for Building Production-Ready AI\n\n## When prompt engineering breaks\n", "note": "A new ## heading above the introduction."}, {"where": "Introduction, third paragraph", "before": "This is where context engineering becomes essential. It shifts the focus from crafting static prompts to building dynamic systems that manage information flow.", "after": "The limitations of prompt engineering demand a new approach. We need to shift our focus from crafting static prompts to building dynamic systems that manage information flow.", "note": "A stock transition replaced with a direct statement."}, {"where": "Conclusion", "before": "We like to say that in the world of AI, we should all think in systems rather than isolated components, having a mindset shift from developers to architects.", "after": "In the world of AI, we should all think in systems rather than isolated components, having a mindset shift from developers to architects.", "note": "Filler opener removed."}, {"where": "References", "before": "1.  Osmani, A. (2025, July 13). Context Engineering: Bringing engineering discipline to prompts.…", "after": "1.  Osmani, A. (n.d.). Context Engineering: Bringing engineering discipline to prompts…", "note": "Publication date changed to n.d. (no date)."}], "summary": "4,337 words before, 4,438 after. 7 blocks changed."}, "a2": {"type": "diff", "title": "article_002.md", "label": "Real changes: article_001.md compared with article_002.md", "kind": "real", "pairs": [{"where": "Introduction, first paragraph", "before": "2024 brought us tool-using agents that could perform actions. Now, we are building memory-enabled agents that remember past interactions and build relationships over time.", "after": "2024 brought us tool-using agents that could perform actions. 2025 - Now, we are building memory-enabled agents that remember past interactions and build relationships over time.", "note": "The timeline gets an explicit year label."}, {"where": "Introduction, second paragraph", "before": "The sheer volume of information an agent might need—past conversations, user data, documents, and action descriptions—has grown exponentially. Simply stuffing all this into a prompt is not a viable strategy.", "after": "The sheer volume of information an agent might need has grown exponentially. This includes past conversations, user data, documents, and action descriptions.", "note": "One long sentence split, and the paragraph broken in two."}, {"where": "Production Implementation Challenges", "before": "Now that we understand what makes up the context, let's look at the core challenges of implementing it in production.", "after": "Now that we understand what makes up the context, we will examine the core challenges of implementing it in production.", "note": "\"Let's\" replaced with \"we will\"."}, {"where": "Conclusion", "before": "In the world of AI, we should all think in systems rather than isolated components, having a mindset shift from developers to architects.", "after": "In the world of AI, it is important to think in systems rather than isolated components, having a mindset shift from developers to architects.", "note": "Less preachy wording."}], "summary": "4,438 words before, 4,449 after. 7 blocks changed. article.md is identical to this file."}, "media": {"type": "media", "title": "Generated media items", "label": "Real Mermaid code and captions from article.md; the picture is a drawing of that code", "kind": "real", "code": "graph TD\n    PE[\"Prompt Engineering\"] --> D1{\"Does it solve the problem?\"}\n    D1 -->|\"Yes\"| Stop[\"Stop\"]\n    D1 -->|\"No\"| CE[\"Context Engineering\"]\n    CE --> D2{\"Does it solve the problem?\"}\n    D2 -->|\"Yes\"| Stop\n    D2 -->|\"No\"| FT[\"Fine-tuning\"]\n    FT --> D3{\"Can you make a fine-tuning dataset?\"}\n    D3 -->|\"Yes\"| Stop\n    D3 -->|\"No\"| RP[\"Reframe the problem\"]", "captions": ["A flowchart illustrating the decision-making workflow for choosing between Prompt Engineering, Context Engineering, and Fine-tuning when starting a new AI project.", "A flowchart illustrating the high-level workflow of how context is built and used in an LLM-driven AI system.", "An architecture diagram illustrating how various context optimization techniques can be combined within a larger AI system to create an optimized context for an LLM.", "A flowchart demonstrating context compression strategies, including message history summarization and user preference memory management.", "Diagram illustrating the orchestrator-worker pattern for isolating context in multi-agent or LLM workflow solutions."]}, "context": {"type": "table", "title": "What Brown loads", "label": "Real sizes of this sample", "kind": "real", "rows": [["article_guideline.md", "4,263 words, 8 sections, 5 diagram requests"], ["research.md", "39,322 words, 14 query groups, 52 sources"], ["Profiles", "character (shivank_agarwal.md), article, structure, mechanics, terminology, tonality"], ["Examples", "2 example articles in inputs/examples/lessons/"]], "after": "char"}, "stats": {"type": "table", "title": "Every version, side by side", "label": "Real numbers from the four files", "kind": "real", "rows": [["article_000.md (draft)", "4,337 words, 8 ## sections, 5 diagrams, 17 references"], ["article_001.md (round 1)", "4,438 words, 9 ## sections, 5 diagrams, 17 references"], ["article_002.md (round 2)", "4,449 words, 9 ## sections, 5 diagrams, 17 references"], ["article.md (final)", "same as article_002.md, plus 1 image taken from the research"]]}, "next": {"type": "text", "title": "Try it yourself", "label": "Commands from the project README", "kind": "real", "body": "# Brown only, on this exact sample (needs GOOGLE_API_KEY):\ncd brown-writing-agent\nmake brown-generate-article DIR_PATH=inputs/tests/01_sample_context_engineering\n\n# Ask for a targeted change:\nmake brown-edit-article DIR_PATH=inputs/tests/01_sample_context_engineering \\\n  HUMAN_FEEDBACK=\"Add one real-world example from Indian e-commerce to the introduction\"\n\n# Nova + Brown in one go: see the README section 'Nova + Brown together'."}}}</script>
+<script>
+(() => {
+  "use strict";
+  const D = JSON.parse(document.getElementById("sim-data").textContent);
+  const S = D.scenes, C = D.content;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const STAGES = ["brief", "n-extract", "n-ingest", "n-research", "n-filter", "n-scrape", "n-compile", "research", "b-load", "b-media", "b-draft", "b-review", "b-edit", "article"];
+  const PH = { Brief: "ph-brief", Nova: "ph-nova", "Hand-off": "ph-hand", Brown: "ph-brown", Review: "ph-review", Done: "ph-done" };
+  const SESS = { shell: ["Terminal", ""], nova: ["Terminal 1: Nova client", "Gemini picks each tool"], brown: ["Terminal 2: Brown CLI", "LangGraph workflow"] };
+  const $ = (id) => document.getElementById(id);
+
+  let cur = 0, playing = false, speed = 1, timers = [], selected = null;
+
+  // ---------------------------------------------------------------- helpers
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+  function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+
+  // ---------------------------------------------------------------- static UI
+  S.forEach((sc, i) => {
+    const b = el("button");
+    b.type = "button";
+    b.className = PH[sc.phase];
+    b.setAttribute("aria-label", `Step ${i + 1}: ${sc.title}`);
+    b.title = `${i + 1}. ${sc.title}`;
+    b.addEventListener("click", () => { stop(); go(i, true); });
+    $("track").appendChild(b);
+    const li = el("li"), sb = el("button", "", sc.title);
+    sb.type = "button";
+    sb.addEventListener("click", () => { stop(); go(i, true); });
+    li.appendChild(sb);
+    $("steps").appendChild(li);
+  });
+
+  // ---------------------------------------------------------------- state at step i
+  function filesUpTo(i) {
+    const map = new Map();
+    for (let j = 0; j <= i; j++) S[j].files.forEach((f) => map.set(f.path, f.cid));
+    return map;
+  }
+  function changedAt(i) { return new Set(S[i].files.map((f) => f.path)); }
+
+  // ---------------------------------------------------------------- renderers
+  function renderTrack(i) {
+    [...$("track").children].forEach((b, j) => {
+      b.classList.toggle("done", j < i);
+      b.classList.toggle("now", j === i);
+    });
+    [...$("steps").querySelectorAll("button")].forEach((b, j) => {
+      if (j === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+    });
+    $("counter").innerHTML = `Step <strong>${i + 1}</strong> of ${S.length}`;
+    $("back").disabled = i === 0;
+    $("next").disabled = i === S.length - 1;
+  }
+
+  function renderPipeline(i) {
+    const at = STAGES.indexOf(S[i].stage);
+    document.querySelectorAll("#pipeline .chip").forEach((c) => {
+      const k = STAGES.indexOf(c.dataset.stage);
+      c.classList.toggle("now", k === at);
+      c.classList.toggle("done", k < at || (S[i].stage === "b-edit" && c.dataset.stage === "b-review"));
+    });
+    const now = document.querySelector("#pipeline .chip.now");
+    if (now) {
+      const box = $("pipeline"), r = now.getBoundingClientRect(), br = box.getBoundingClientRect();
+      if (r.left < br.left || r.right > br.right) box.scrollLeft += r.left - br.left - 40;
+    }
+  }
+
+  function renderNarr(i) {
+    const sc = S[i];
+    const ph = $("phase");
+    ph.className = "phase " + PH[sc.phase];
+    ph.textContent = sc.phase;
+    $("title").textContent = sc.title;
+    $("narr").innerHTML = sc.narr.map((p) => `<p>${p}</p>`).join("");  // narration is authored HTML from build.py
+  }
+
+  function lineEl(l, fresh) {
+    const d = el("div", "l-" + l.c + (fresh && !reduce ? " l-new" : ""), l.s === "" ? " " : l.s);
+    return d;
+  }
+
+  function renderTerm(i, animate) {
+    const sess = S[i].session, pre = $("term");
+    $("sess").textContent = SESS[sess][0];
+    $("sessnote").textContent = SESS[sess][1];
+    pre.textContent = "";
+    for (let j = 0; j < i; j++) if (S[j].session === sess) S[j].lines.forEach((l) => pre.appendChild(lineEl(l, false)));
+    const mine = S[i].lines;
+    const cursor = el("span", "cursor");
+    if (!animate || reduce || mine.length === 0) {
+      mine.forEach((l) => pre.appendChild(lineEl(l, false)));
+      pre.appendChild(cursor);
+      pre.scrollTop = pre.scrollHeight;
+      return 0;
+    }
+    pre.appendChild(cursor);
+    pre.scrollTop = pre.scrollHeight;
+    const step = 230 / speed;
+    mine.forEach((l, k) => later(() => {
+      pre.insertBefore(lineEl(l, true), cursor);
+      pre.scrollTop = pre.scrollHeight;
+    }, step * (k + 1)));
+    return step * (mine.length + 1);
+  }
+
+  function renderTree(i) {
+    const files = filesUpTo(i), changed = changedAt(i), tree = $("tree");
+    tree.textContent = "";
+    const rootUl = el("ul"), rootLi = el("li");
+    rootLi.appendChild(el("span", "dir root", D.folder + "/"));
+    const top = el("ul");
+    rootLi.appendChild(top);
+    rootUl.appendChild(rootLi);
+    const dirs = new Map([["", top]]);
+    if (files.size === 0) top.appendChild(el("li", "empty", "(empty)"));
+    for (const [path, cid] of files) {
+      const parts = path.split("/").filter(Boolean);
+      const isDir = path.endsWith("/");
+      let parent = "";
+      const upto = isDir ? parts.length - 1 : parts.length - 1;
+      for (let k = 0; k < upto; k++) {
+        const key = parts.slice(0, k + 1).join("/");
+        if (!dirs.has(key)) {
+          const li = el("li");
+          li.appendChild(el("span", "dir", parts[k] + "/"));
+          const ul = el("ul");
+          li.appendChild(ul);
+          dirs.get(parent).appendChild(li);
+          dirs.set(key, ul);
+        }
+        parent = key;
+      }
+      const li = el("li"), b = el("button", "", parts[parts.length - 1] + (isDir ? "/" : ""));
+      b.type = "button";
+      b.dataset.cid = cid;
+      if (changed.has(path)) {
+        b.classList.add("fresh");
+        b.appendChild(el("span", "tag", "new"));
+      }
+      if (cid === selected) b.classList.add("sel");
+      b.addEventListener("click", () => { selected = cid; renderPreview(); markSel(); });
+      li.appendChild(b);
+      dirs.get(parent).appendChild(li);
+    }
+    tree.appendChild(rootUl);
+    // Scroll only the tree box (not the page) so the newest file is visible.
+    const fresh = tree.querySelector(".fresh");
+    if (fresh) tree.scrollTop = Math.max(0, fresh.offsetTop - 24);
+  }
+  function markSel() {
+    document.querySelectorAll("#tree button").forEach((b) => b.classList.toggle("sel", b.dataset.cid === selected));
+  }
+
+  function mermaidSvg() {
+    const box = (x, y, w, t) => `<rect x="${x}" y="${y}" width="${w}" height="38" rx="8" fill="#F3EAE3" stroke="#7A4A2B" stroke-width="1.5"/><text x="${x + w / 2}" y="${y + 24}" text-anchor="middle" font-size="13" font-weight="600">${t}</text>`;
+    const dia = (cy, t1, t2) => `<polygon points="110,${cy} 230,${cy - 30} 350,${cy} 230,${cy + 30}" fill="#fff" stroke="#18212F" stroke-width="1.4"/>` +
+      (t2 ? `<text x="230" y="${cy - 3}" text-anchor="middle" font-size="11.5">${t1}</text><text x="230" y="${cy + 12}" text-anchor="middle" font-size="11.5">${t2}</text>`
+          : `<text x="230" y="${cy + 4}" text-anchor="middle" font-size="11.5">${t1}</text>`);
+    const down = (y1, y2, lab) => `<line x1="230" y1="${y1}" x2="230" y2="${y2 - 2}" stroke="#18212F" stroke-width="1.4" marker-end="url(#ma)"/>` + (lab ? `<text x="238" y="${(y1 + y2) / 2 + 4}" font-size="11" fill="#5B6676">${lab}</text>` : "");
+    return `<svg viewBox="0 0 470 530" role="img" aria-label="Drawing of the Mermaid diagram: prompt engineering, then context engineering, then fine-tuning, else reframe the problem">
+      <defs><marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#18212F"/></marker></defs>
+      <g font-family="Avenir Next, Segoe UI, system-ui, sans-serif" fill="#18212F">
+        ${box(130, 8, 200, "Prompt Engineering")} ${down(46, 65)}
+        ${dia(95, "Does it solve the problem?")} ${down(125, 165, "No")}
+        ${box(130, 165, 200, "Context Engineering")} ${down(203, 222)}
+        ${dia(252, "Does it solve the problem?")} ${down(282, 322, "No")}
+        ${box(130, 322, 200, "Fine-tuning")} ${down(360, 379)}
+        ${dia(409, "Can you make a", "fine-tuning dataset?")} ${down(439, 480, "No")}
+        ${box(130, 480, 200, "Reframe the problem")}
+        <rect x="396" y="233" width="62" height="38" rx="8" fill="#18212F"/><text x="427" y="257" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">Stop</text>
+        <path d="M350,95 H427 V231" fill="none" stroke="#18212F" stroke-width="1.4" marker-end="url(#ma)"/><text x="360" y="88" font-size="11" fill="#5B6676">Yes</text>
+        <line x1="350" y1="252" x2="394" y2="252" stroke="#18212F" stroke-width="1.4" marker-end="url(#ma)"/><text x="358" y="245" font-size="11" fill="#5B6676">Yes</text>
+        <path d="M350,409 H427 V273" fill="none" stroke="#18212F" stroke-width="1.4" marker-end="url(#ma)"/><text x="360" y="402" font-size="11" fill="#5B6676">Yes</text>
+      </g></svg>`;
+  }
+
+  function renderItem(item, host) {
+    host.appendChild(el("p", "pv-title", item.title));
+    host.appendChild(el("span", "pv-label k-" + item.kind, item.label));
+    if (item.type === "text") {
+      host.appendChild(el("pre", "", item.body));
+    } else if (item.type === "diff") {
+      host.appendChild(el("p", "summary", item.summary));
+      item.pairs.forEach((p) => {
+        const d = el("div", "pair");
+        d.appendChild(el("p", "where", p.where));
+        d.appendChild(el("div", "b", p.before));
+        d.appendChild(el("div", "a", p.after));
+        d.appendChild(el("p", "note", p.note));
+        host.appendChild(d);
+      });
+    } else if (item.type === "media") {
+      const g = el("div", "mm");
+      g.insertAdjacentHTML("beforeend", mermaidSvg());
+      g.appendChild(el("p", "sub", "Mermaid code generated for Image 1"));
+      g.appendChild(el("pre", "", "```mermaid\n" + item.code + "\n```"));
+      g.appendChild(el("p", "sub", "Captions of the 5 generated diagrams"));
+      const ol = el("ol", "caps");
+      item.captions.forEach((c) => ol.appendChild(el("li", "", c)));
+      g.appendChild(ol);
+      host.appendChild(g);
+    } else if (item.type === "table") {
+      const t = el("table", "kv");
+      item.rows.forEach(([k, v]) => {
+        const tr = el("tr");
+        tr.appendChild(el("th", "", k));
+        tr.appendChild(el("td", "", v));
+        t.appendChild(tr);
+      });
+      host.appendChild(t);
+      if (item.after) renderItem(C[item.after], host);
+    }
+  }
+
+  function renderPreview() {
+    const host = $("preview");
+    host.textContent = "";
+    const sc = S[cur];
+    if (sc.extra && selected === sc.show) renderItem(C[sc.extra], host);
+    renderItem(C[selected], host);
+    host.scrollTop = 0;
+  }
+
+  // ---------------------------------------------------------------- navigation
+  function go(i, animate) {
+    clearTimers();
+    cur = Math.max(0, Math.min(S.length - 1, i));
+    selected = S[cur].show;
+    renderTrack(cur);
+    renderPipeline(cur);
+    renderNarr(cur);
+    renderTree(cur);
+    renderPreview();
+    const typing = renderTerm(cur, animate);
+    if (playing) {
+      if (cur === S.length - 1) { later(stop, typing + 400); return; }
+      const words = S[cur].narr.join(" ").replace(/<[^>]+>/g, "").split(/\s+/).length;
+      const dwell = Math.max(4200, words * 190) / speed;
+      later(() => go(cur + 1, true), typing + dwell);
+    }
+  }
+  function play() {
+    if (cur === S.length - 1) cur = -1;
+    playing = true;
+    $("play").textContent = "Pause";
+    go(cur + 1, true);
+  }
+  function stop() {
+    playing = false;
+    clearTimers();
+    $("play").textContent = cur === S.length - 1 ? "Replay" : "Play";
+    // finish any half-typed terminal output
+    renderTerm(cur, false);
+  }
+
+  $("play").addEventListener("click", () => (playing ? stop() : play()));
+  $("next").addEventListener("click", () => { stop(); go(cur + 1, true); $("play").textContent = cur === S.length - 1 ? "Replay" : "Play"; });
+  $("back").addEventListener("click", () => { stop(); go(cur - 1, false); $("play").textContent = "Play"; });
+  $("restart").addEventListener("click", () => { stop(); go(0, false); $("play").textContent = "Play"; });
+  $("speed").addEventListener("change", (e) => { speed = parseFloat(e.target.value); });
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("select, input, textarea")) return;
+    if (e.target.closest("button, summary") && (e.key === " " || e.key === "Enter")) return;
+    if (e.key === " " || e.key === "k") { e.preventDefault(); playing ? stop() : play(); }
+    else if (e.key === "ArrowRight" || e.key === "l") { e.preventDefault(); $("next").click(); }
+    else if (e.key === "ArrowLeft" || e.key === "j") { e.preventDefault(); $("back").click(); }
+  });
+
+  go(0, false);
+})();
+</script>
+</body>
+</html>

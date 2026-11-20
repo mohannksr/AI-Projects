@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Problem statement: build Nova, a research agent, and Brown, a writing agent, that work together over MCP to turn a topic into a cited blog article.">
+<title>Project 20 · Part 1 · Nova + Brown blog writer · Problem statement · AWS AI Capstone</title>
+<meta name="author" content="Shivank Agarwal">
+<style>
+  :root {
+    --paper: #F4F6F8;
+    --sheet: #FFFFFF;
+    --ink: #18212F;
+    --muted: #5B6676;
+    --rule: #D5DBE3;
+    --nova: #0B7A75;
+    --nova-tint: #E3F2F1;
+    --brown: #7A4A2B;
+    --brown-tint: #F3EAE3;
+    --pencil: #2C55D6;
+    --pencil-tint: #E8EDFC;
+    --code-bg: #1B2433;
+    --code-ink: #E3E8EF;
+    --serif: "Charter", "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
+    --sans: "Avenir Next", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.68;
+  }
+  a { color: var(--pencil); text-underline-offset: 3px; }
+  a:focus-visible, summary:focus-visible { outline: 3px solid var(--pencil); outline-offset: 3px; border-radius: 2px; }
+  .page { max-width: 64rem; margin: 0 auto; padding: 1rem 1.5rem 5rem; }
+  .page > * { max-width: 46rem; }
+  .wide { max-width: 64rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  header.masthead { padding-top: 3.5rem; }
+  .brand { font-family: var(--sans); font-size: 0.95rem; color: var(--muted); margin: 0 0 2.2rem; }
+  .brand strong { color: var(--ink); font-weight: 650; }
+  h1 {
+    font-family: var(--sans);
+    font-weight: 750;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    margin: 0 0 1rem;
+    max-width: 21ch;
+  }
+  .dek { font-size: 1.25rem; line-height: 1.55; color: var(--muted); max-width: 40rem; margin: 0 0 2.5rem; }
+
+  figure.pipeline { margin: 0 0 1rem; background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 1.5rem 1rem 0.75rem; }
+  figure.pipeline .scroll { overflow-x: auto; }
+  figure.pipeline svg { display: block; width: 100%; min-width: 720px; height: auto; }
+  figure.pipeline figcaption { font-family: var(--sans); font-size: 0.9rem; color: var(--muted); padding: 0.5rem 0.75rem 0.25rem; }
+
+  h2 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 1.6rem;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    margin: 3.2rem 0 0.8rem;
+  }
+  h3 { font-family: var(--sans); font-weight: 650; font-size: 1.15rem; margin: 2rem 0 0.4rem; }
+  p { margin: 0 0 1.1rem; }
+  ul, ol { padding-left: 1.3rem; margin: 0 0 1.2rem; }
+  li { margin: 0.35rem 0; }
+  code { font-family: var(--mono); font-size: 0.86em; background: #E6EAF0; padding: 0.1em 0.35em; border-radius: 4px; }
+  p code, li code { overflow-wrap: anywhere; }
+
+  dl.brief { display: grid; grid-template-columns: 9rem 1fr; gap: 0.55rem 1.25rem; margin: 2rem 0 0; font-size: 1rem; }
+  dl.brief dt { font-family: var(--sans); font-weight: 650; color: var(--muted); }
+  dl.brief dd { margin: 0; }
+
+  .req { border-left: 4px solid var(--rule); padding: 0.2rem 0 0.2rem 1.1rem; margin: 1.4rem 0; }
+  .req.nova { border-color: var(--nova); }
+  .req.brown { border-color: var(--brown); }
+  .req.mcp { border-color: var(--pencil); }
+  .req h3 { margin-top: 0; }
+  .req .who { font-family: var(--sans); font-size: 0.9rem; color: var(--muted); margin: -0.2rem 0 0.6rem; }
+
+  .note {
+    background: var(--pencil-tint);
+    border-left: 3px solid var(--pencil);
+    padding: 0.9rem 1.1rem;
+    margin: 1.5rem 0;
+    font-style: italic;
+    color: #23345F;
+  }
+  .note p:last-child { margin-bottom: 0; }
+
+  pre {
+    background: var(--code-bg); color: var(--code-ink);
+    font-family: var(--mono); font-size: 0.82rem; line-height: 1.6;
+    padding: 1rem 1.15rem; border-radius: 10px; overflow-x: auto; margin: 0.6rem 0 1.4rem;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+  .filelabel { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); margin: 1.2rem 0 0; overflow-wrap: anywhere; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.97rem; margin: 0.8rem 0 1.6rem; }
+  th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--rule); }
+  th { font-family: var(--sans); font-weight: 650; font-size: 0.9rem; color: var(--muted); }
+  td.num { font-family: var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  ol.milestones { list-style: none; padding: 0; counter-reset: m; }
+  ol.milestones li { counter-increment: m; position: relative; padding: 0.15rem 0 0.9rem 3rem; margin: 0; border-left: 2px solid var(--rule); margin-left: 0.9rem; }
+  ol.milestones li::before {
+    content: counter(m); position: absolute; left: -0.95rem; top: 0.1rem;
+    width: 1.8rem; height: 1.8rem; border-radius: 50%;
+    background: var(--sheet); border: 2px solid var(--ink);
+    font-family: var(--sans); font-weight: 700; font-size: 0.85rem;
+    display: grid; place-items: center;
+  }
+  ol.milestones li:last-child { border-left-color: transparent; }
+  ol.milestones strong { font-family: var(--sans); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); font-family: var(--sans); font-size: 0.9rem; color: var(--muted); }
+
+  @media (max-width: 640px) {
+    body { font-size: 17px; }
+    dl.brief { grid-template-columns: 1fr; gap: 0.1rem; }
+    dl.brief dd { margin-bottom: 0.7rem; }
+    th, td { padding: 0.5rem 0.4rem; }
+  }
+  @media print {
+    body { background: #fff; }
+    figure.pipeline { break-inside: avoid; }
+    pre { white-space: pre-wrap; }
+  }
+</style>
+</head>
+<body>
+<!-- awsq:top -->
+<style>
+.awsq{--q-card:var(--card,var(--surface,#fff));--q-card2:var(--card-2,var(--surface-2,#f3f3f0));--q-rule:var(--rule,var(--line,#ddd));
+  --q-ink:var(--ink,#1a1a1a);--q-muted:var(--muted,#666);--q-acc:var(--tool,var(--accent,#0b7f73));--q-acc-t:var(--tool-t,var(--accent-soft,#d6f2ee));
+  --q-acc-ink:var(--tool-ink,var(--accent,#075a51));--q-cur:var(--brain,var(--gold,#b07600));--q-on:var(--card,var(--surface,#fff));
+  --q-focus:var(--focus,var(--accent,#2958c4));--q-mono:var(--font-mono,"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace);
+  max-width:72rem;margin:18px auto;padding:0 40px;font-family:var(--font-body,inherit)}
+.awsq-box{background:var(--q-card);border:1px solid var(--q-rule);border-radius:12px;padding:12px 14px}
+.awsq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}
+.awsq-cap{display:block;margin:0;font:600 .7rem/1.4 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-row{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.awsq-l{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;padding:9px 13px;border-radius:9px;border:1px solid var(--q-rule);color:var(--q-ink);text-decoration:none;font-size:.95rem;line-height:1.3}
+a.awsq-l:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-next{text-align:right;align-items:flex-end}
+.awsq-d{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--q-acc)}
+.awsq-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+span.awsq-l{border-style:dashed;color:var(--q-muted)} span.awsq-l .awsq-d,span.awsq-l .awsq-t{color:var(--q-muted);font-weight:400}
+a.awsq-home{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:6px 12px;border-radius:9px;text-decoration:none;color:var(--q-ink);text-align:center;font-size:.85rem;line-height:1.3}
+a.awsq-home:hover{background:var(--q-card2);text-decoration:none}
+.awsq-home b{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-steps{display:flex;gap:5px;margin:11px 0 0;padding:0;list-style:none}
+.awsq-steps li{flex:1 1 0;margin:0;padding:0;list-style:none}
+.awsq-steps li::before{content:none}
+.awsq-steps a{display:block;text-align:center;padding:4px 0;border-radius:5px;font:600 .75rem/1.4 var(--q-mono);text-decoration:none;background:var(--q-card2);border:1px solid var(--q-rule);color:var(--q-muted)}
+.awsq-steps a.done{background:var(--q-acc-t);color:var(--q-acc-ink);border-color:transparent}
+.awsq-steps a.cur{background:var(--q-cur);color:var(--q-on);border-color:transparent}
+.awsq-steps a:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-recs{display:flex;flex-wrap:wrap;gap:8px;margin:11px 0 0}
+.awsq-rec{flex:1 1 220px;display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:9px;border:1px solid var(--q-acc);background:var(--q-acc-t);
+  color:var(--q-acc-ink);font-weight:700;font-size:.92rem;line-height:1.3;text-decoration:none}
+a.awsq-rec:hover{text-decoration:none;filter:brightness(.97)}
+.awsq-rec i{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--q-acc);color:var(--q-on);font-style:normal;font-size:.7rem}
+.awsq-rec small{margin-left:auto;font:600 .68rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+.awsq-files{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+.awsq-files > b{margin-right:4px;font:600 .7rem/1.3 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-fb{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-rule);color:var(--q-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-fb:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-fb small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+span.awsq-fb{border-style:dashed;color:var(--q-muted);font-weight:600}
+.awsq a:focus-visible{outline:2px solid var(--q-focus);outline-offset:2px}
+.awsq a.aih{flex:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:var(--q-acc);color:var(--q-on);
+  font:700 .74rem/1.2 var(--q-mono);letter-spacing:.04em;text-decoration:none;white-space:nowrap}
+.awsq a.aih:hover{filter:brightness(1.08);text-decoration:none}
+.awsq-ver{display:flex;justify-content:flex-end;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+a.awsq-vl{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-acc);color:var(--q-acc-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-vl:hover{background:var(--q-acc-t);text-decoration:none}
+.awsq-vl small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-bottom{padding:0 !important;margin:48px 0 8px;max-width:none}
+.awsq-inmain{padding:0 !important;margin:0 0 28px;max-width:none}
+@media (max-width:1100px){.awsq{padding:0 24px}}
+@media (max-width:640px){.awsq-steps{flex-wrap:wrap}.awsq-steps li{flex:1 0 28px}.awsq{padding:0 16px}.awsq-t{white-space:normal;overflow-wrap:anywhere}.awsq-row{grid-template-columns:1fr 1fr}a.awsq-home{grid-column:1 / -1;grid-row:1;flex-direction:row;gap:8px}a.awsq-rec small{display:none}}
+@media print{.awsq{display:none}}
+</style>
+<div class="awsq awsq-top" role="navigation" aria-label="Capstone navigation (top)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 20 of 23 · Part 1 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../live-auction-house/pages/live-auction-ship/"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8</span></a><a class="awsq-home" href="../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="./pages/nova-brown-solution/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../live-auction-house/" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="done" href="../live-auction-house/pages/live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="done" href="../live-auction-house/pages/live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="cur" href="./" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement" aria-current="page">P20·1</a></li><li><a class="" href="./pages/nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="" href="./pages/nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/balajiraghuram92/balajiraghuram92.github.io/tree/main/zips/Code/Capstone-Projects/nova-brown-blog-agent" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://balajiraghuram92.github.io/zips/Code/Zips/nova-brown-blog-agent-code.zip" download>⬇ Download all<small>.zip</small></a></div></div></div>
+<!-- /awsq:top -->
+
+<header class="masthead wide">
+  <p class="brand"><strong>Future with Shivank</strong>  /  AI engineering portfolio project  /  Problem statement</p>
+  <h1>Build a multi-agent system that researches and writes technical blogs</h1>
+  <p class="dek">Two cooperating AI agents: one that does the research and one that writes, reviews and edits, turning a one-page brief into a cited, on-style article draft.</p>
+
+  <figure class="pipeline">
+    <div class="scroll"><svg viewbox="0 0 960 300" role="img" aria-labelledby="pipe-title pipe-desc">
+      <title id="pipe-title">The system you will build</title>
+      <desc id="pipe-desc">An article guideline goes into Nova, the research agent, which writes research.md. Brown, the writing agent, reads the guideline and the research, writes a draft, then reviews and edits it in a loop, and saves article.md.</desc>
+      <defs>
+        <marker id="arrow" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="8" markerheight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#18212F"></path>
+        </marker>
+        <marker id="arrow-pencil" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="8" markerheight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2C55D6"></path>
+        </marker>
+      </defs>
+      <g font-family="Avenir Next, Segoe UI, Helvetica Neue, system-ui, sans-serif" fill="#18212F">
+        <!-- guideline sheet -->
+        <g transform="translate(18,70)">
+          <path d="M0,0 H92 L118,26 V140 H0 Z" fill="#fff" stroke="#18212F" stroke-width="1.6"></path>
+          <path d="M92,0 V26 H118" fill="none" stroke="#18212F" stroke-width="1.6"></path>
+          <line x1="16" y1="48" x2="100" y2="48" stroke="#C3CAD4" stroke-width="3"></line>
+          <line x1="16" y1="62" x2="88" y2="62" stroke="#C3CAD4" stroke-width="3"></line>
+          <line x1="16" y1="76" x2="96" y2="76" stroke="#C3CAD4" stroke-width="3"></line>
+          <line x1="16" y1="90" x2="70" y2="90" stroke="#C3CAD4" stroke-width="3"></line>
+          <text x="59" y="166" text-anchor="middle" font-size="14" font-weight="650">article_guideline.md</text>
+          <text x="59" y="185" text-anchor="middle" font-size="12.5" fill="#5B6676">your one-page brief</text>
+        </g>
+        <line x1="146" y1="140" x2="196" y2="140" stroke="#18212F" stroke-width="1.8" marker-end="url(#arrow)"></line>
+
+        <!-- Nova -->
+        <g transform="translate(202,58)">
+          <rect width="214" height="164" rx="14" fill="#E3F2F1" stroke="#0B7A75" stroke-width="2"></rect>
+          <text x="20" y="36" font-size="19" font-weight="750" fill="#0B7A75">Nova</text>
+          <text x="20" y="57" font-size="13.5" fill="#18212F">research agent</text>
+          <text x="20" y="88" font-size="12.5" fill="#33404F">web search, 3 rounds</text>
+          <text x="20" y="107" font-size="12.5" fill="#33404F">scrape and clean pages</text>
+          <text x="20" y="126" font-size="12.5" fill="#33404F">GitHub repos, YouTube talks</text>
+          <text x="20" y="145" font-size="12.5" fill="#33404F">keep only trusted sources</text>
+        </g>
+        <line x1="420" y1="140" x2="462" y2="140" stroke="#18212F" stroke-width="1.8" marker-end="url(#arrow)"></line>
+
+        <!-- research sheet -->
+        <g transform="translate(468,82)">
+          <path d="M0,0 H74 L96,22 V116 H0 Z" fill="#fff" stroke="#18212F" stroke-width="1.6"></path>
+          <path d="M74,0 V22 H96" fill="none" stroke="#18212F" stroke-width="1.6"></path>
+          <line x1="14" y1="40" x2="80" y2="40" stroke="#9FD3CF" stroke-width="3"></line>
+          <line x1="14" y1="54" x2="72" y2="54" stroke="#9FD3CF" stroke-width="3"></line>
+          <line x1="14" y1="68" x2="78" y2="68" stroke="#9FD3CF" stroke-width="3"></line>
+          <text x="48" y="140" text-anchor="middle" font-size="14" font-weight="650">research.md</text>
+          <text x="48" y="158" text-anchor="middle" font-size="12.5" fill="#5B6676">sources + notes</text>
+        </g>
+        <line x1="570" y1="140" x2="612" y2="140" stroke="#18212F" stroke-width="1.8" marker-end="url(#arrow)"></line>
+
+        <!-- Brown -->
+        <g transform="translate(618,58)">
+          <rect width="190" height="164" rx="14" fill="#F3EAE3" stroke="#7A4A2B" stroke-width="2"></rect>
+          <text x="20" y="36" font-size="19" font-weight="750" fill="#7A4A2B">Brown</text>
+          <text x="20" y="57" font-size="13.5">writing agent</text>
+          <text x="20" y="88" font-size="12.5" fill="#33404F">draws diagrams</text>
+          <text x="20" y="107" font-size="12.5" fill="#33404F">writes the draft</text>
+          <text x="20" y="126" font-size="12.5" fill="#33404F">follows style profiles</text>
+          <text x="20" y="145" font-size="12.5" fill="#33404F">in your author voice</text>
+        </g>
+        <!-- blue-pencil review loop -->
+        <path d="M660,226 C640,292 790,292 772,226" fill="none" stroke="#2C55D6" stroke-width="2.4" stroke-dasharray="7 5" marker-end="url(#arrow-pencil)"></path>
+        <text x="716" y="296" text-anchor="middle" font-size="13" fill="#2C55D6" font-style="italic">review, then edit (up to 3 rounds)</text>
+        <line x1="812" y1="140" x2="842" y2="140" stroke="#18212F" stroke-width="1.8" marker-end="url(#arrow)"></line>
+
+        <!-- article sheet -->
+        <g transform="translate(848,76)">
+          <path d="M0,0 H76 L98,22 V128 H0 Z" fill="#fff" stroke="#18212F" stroke-width="1.6"></path>
+          <path d="M76,0 V22 H98" fill="none" stroke="#18212F" stroke-width="1.6"></path>
+          <line x1="14" y1="40" x2="82" y2="40" stroke="#D9BFAE" stroke-width="3"></line>
+          <line x1="14" y1="54" x2="76" y2="54" stroke="#D9BFAE" stroke-width="3"></line>
+          <line x1="14" y1="68" x2="80" y2="68" stroke="#D9BFAE" stroke-width="3"></line>
+          <line x1="14" y1="82" x2="60" y2="82" stroke="#D9BFAE" stroke-width="3"></line>
+          <text x="49" y="152" text-anchor="middle" font-size="14" font-weight="650">article.md</text>
+          <text x="49" y="170" text-anchor="middle" font-size="12.5" fill="#5B6676">ready for review</text>
+        </g>
+        <text x="480" y="30" text-anchor="middle" font-size="13" fill="#5B6676">Both agents run as MCP servers, so any MCP client can drive them</text>
+      </g>
+    </svg></div>
+    <figcaption>The system you will build. A human writes the brief; the agents do the research, the first draft and the self-review.</figcaption>
+  </figure>
+
+  <dl class="brief">
+    <dt>Target role</dt><dd>AI Engineer, Forward Deployed Engineer (FDE), Applied ML Engineer</dd>
+    <dt>Level</dt><dd>Intermediate to advanced. You should be comfortable with Python, async code and calling LLM APIs.</dd>
+    <dt>Time</dt><dd>1 to 2 weeks as a portfolio project. 60 to 90 minutes as a system design interview discussion.</dd>
+    <dt>Stack</dt><dd>Python, <code>uv</code>, LangGraph, FastMCP (Model Context Protocol), Gemini models, Perplexity or Tavily search, Firecrawl scraping, Opik for tracing and evals</dd>
+    <dt>Author</dt><dd>Shivank Agarwal</dd>
+  </dl>
+</header>
+
+<main class="page">
+
+<h2>The situation</h2>
+<p>You are an AI engineer at a fast-growing ed-tech company. The content team publishes technical lessons and blog posts every week on topics like RAG, tool calling and AI agents. Each 3,000-word article takes a senior engineer two to three working days:</p>
+<ul>
+  <li><strong>Day 1, research.</strong> Reading docs, papers, GitHub repos and conference talks, and keeping track of which source said what.</li>
+  <li><strong>Day 2, drafting.</strong> Writing the article in the company's voice, with diagrams and code.</li>
+  <li><strong>Day 3, editing.</strong> Checking the draft against the brief and the style guide, then fixing tone, structure and terminology.</li>
+</ul>
+<p>The head of content wants to cut this to a few hours of human review per article without losing quality. Engineers should only have to write a one-page brief (the <em>article guideline</em>) and then review a solid, cited draft.</p>
+
+<p>Think of how a newsroom works. A researcher collects and checks sources and hands a file to the writer. The writer drafts the story. An editor marks it up with a blue pencil, and the writer revises until the editor has no more comments. Your job is to build that newsroom with two AI agents.</p>
+
+<h2>What you will build</h2>
+<p>A system of two specialised agents that work through files on disk:</p>
+<ol>
+  <li><strong>Nova, the research agent</strong>, reads <code>article_guideline.md</code>, gathers and filters sources, and writes <code>research.md</code>.</li>
+  <li><strong>Brown, the writing agent</strong>, reads the guideline and the research, writes the article, reviews it against the guideline and the style profiles, edits it, and saves <code>article.md</code>.</li>
+</ol>
+<p>Both agents must be exposed as <strong>MCP servers</strong>, so they can be driven from a terminal client you build, from Claude Desktop or Cursor, or from one combined endpoint that runs the full research-to-article flow.</p>
+
+<h3>Input: the article guideline</h3>
+<p>A Markdown brief written by a human. It describes the topic, the outline, the audience and the sources the author already wants used. Here is part of a real guideline from the project's sample data:</p>
+<p class="filelabel">nova-research-agent/data/research_function_calling/article_guideline.md</p>
+<pre><code>## Global Context of the Lesson
+
+Function calling (or tool calling) is a mechanism that enables AI agents to invoke
+predefined functions or tools to take real-world actions. ...
+
+## Lesson Outline
+
+1. **Section 1: Introduction** - Why agents need to take action
+2. **Section 2: How Function Calling Works** - Core mechanisms and patterns
+3. **Section 3: Implementing Function Calling** - Hands-on code examples
+4. **Section 4: Advanced Patterns** - Error handling and complex scenarios
+5. **Section 5: Conclusion** - Connecting to planning and reasoning
+
+## Sources
+
+- [Function calling with the Gemini API](https://ai.google.dev/gemini-api/docs/function-calling)
+- [Function calling with OpenAI's API](https://platform.openai.com/docs/guides/function-calling)
+- [Tool Calling Agent From Scratch](https://www.youtube.com/watch?v=h8gMhXYAv1k)
+- [GPT-5 Prompting Guide](https://github.com/openai/openai-cookbook/blob/main/examples/gpt-5/gpt-5_prompting_guide.ipynb)</code></pre>
+
+<h3>Outputs</h3>
+<table>
+  <thead><tr><th>File</th><th>Written by</th><th>What it contains</th></tr></thead>
+  <tbody>
+    <tr><td><code>research.md</code></td><td>Nova</td><td>Web research grouped by query, full text of the best sources, GitHub code summaries and YouTube transcripts, each in a collapsible block with its URL.</td></tr>
+    <tr><td><code>article_000.md</code>, <code>article_001.md</code>, ...</td><td>Brown</td><td>The first draft and each revised version, so a human can see what every review round changed.</td></tr>
+    <tr><td><code>article.md</code></td><td>Brown</td><td>The final article: title, sections that follow the outline, Mermaid diagrams, and numbered references.</td></tr>
+  </tbody>
+</table>
+
+<h2>Functional requirements</h2>
+
+<div class="req nova">
+  <h3>R1. Research agent (Nova)</h3>
+  <p class="who">Turns a guideline into a research file.</p>
+  <ol>
+    <li>Extract every reference in the guideline and sort it into GitHub links, YouTube links, other web links and local files (<code>.py</code>, <code>.ipynb</code>, <code>.md</code>).</li>
+    <li>Ingest each kind in parallel: summarise GitHub repos, transcribe YouTube videos, scrape and clean web pages, copy local files.</li>
+    <li>Run a research loop for 3 rounds. In each round, find the gaps between the guideline and what has been collected so far, generate new search queries, and run them on a web search API.</li>
+    <li>Score every search result for trust, authority and relevance, and keep only the good ones.</li>
+    <li>Pick up to 5 of the kept sources that deserve a full scrape, and scrape them.</li>
+    <li>Combine everything into one <code>research.md</code>, organised into sections with collapsible blocks.</li>
+    <li>If a step completely fails (for example 0 of 7 URLs scraped), stop the workflow and ask the user how to continue. Do not write an article on empty research.</li>
+  </ol>
+</div>
+
+<div class="req brown">
+  <h3>R2. Writing agent (Brown)</h3>
+  <p class="who">Turns a guideline plus research into a finished article, and edits articles on request.</p>
+  <ol>
+    <li>Load the guideline, the research, a set of reusable <em>writing profiles</em> (author persona, article rules, structure, mechanics, terminology, tonality) and a few example articles for style.</li>
+    <li>Detect diagram requests in the guideline (for example "Generate mermaid diagram") and generate them in parallel before writing.</li>
+    <li>Write a first draft that follows the outline and stays anchored in the research.</li>
+    <li>Review the draft against the guideline and every profile, producing specific, located comments. Then edit the article to address them.</li>
+    <li>Repeat review and edit up to a configurable number of rounds (3 by default), and stop early if the reviewer has nothing to say. Save every version.</li>
+    <li>Support two editing modes driven by human feedback: edit the whole article, or edit only a selected range of lines.</li>
+  </ol>
+</div>
+
+<div class="req mcp">
+  <h3>R3. Integration and access</h3>
+  <p class="who">Makes the agents usable from anywhere.</p>
+  <ol>
+    <li>Expose Nova and Brown as separate MCP servers with tools, prompts and resources, over both <code>stdio</code> and HTTP.</li>
+    <li>Ship an interactive terminal client that lists tools, loads prompts and lets an LLM call the tools.</li>
+    <li>Ship one composed MCP server that mounts both agents and adds a single end-to-end prompt: research, then write, on the same folder.</li>
+  </ol>
+</div>
+
+<h2>Non-functional requirements</h2>
+<ul>
+  <li><strong>Configurable.</strong> Models, thinking levels, number of review rounds and file paths live in YAML or environment settings, not in code.</li>
+  <li><strong>Reliable.</strong> LLM calls retry on transient errors. Scraping runs with a concurrency limit and timeouts. Failures are reported clearly.</li>
+  <li><strong>Testable offline.</strong> The test suite runs with a fake model and makes no paid API calls.</li>
+  <li><strong>Observable.</strong> Every workflow run can be traced end to end, including each LLM call.</li>
+  <li><strong>Measurable.</strong> Article quality is scored with LLM-as-judge metrics against a small evaluation dataset.</li>
+  <li><strong>Cost-aware.</strong> Use a fast, cheap model for most steps and a stronger model only where it pays off.</li>
+</ul>
+
+<h2>Constraints</h2>
+<ul>
+  <li>Python with <code>uv</code>. Each component is its own <code>uv</code> project with its own virtual environment.</li>
+  <li>LLMs: Gemini models through LangChain (<code>google_genai</code>) and the Google GenAI SDK. Keep the model choice behind a config so it can be swapped later.</li>
+  <li>Search: Perplexity by default, Tavily as an alternative provider. Scraping: Firecrawl.</li>
+  <li>The agents talk only through files and MCP. No shared database is needed for the local version.</li>
+</ul>
+
+<div class="note">
+  <p>A good solution keeps a human in charge: the agents produce a researched draft, and a person decides what gets published. Design for "excellent first draft in hours", not "publish without reading".</p>
+</div>
+
+<h2>Deliverables</h2>
+<ol>
+  <li>Source code for Nova (server and client), Brown (workflows and server) and the integration layer.</li>
+  <li>A README that gets a new engineer from clone to first article in under 15 minutes.</li>
+  <li>At least one sample folder with a guideline, the research Nova produced and the article Brown wrote, including the intermediate drafts.</li>
+  <li>A passing offline test suite.</li>
+  <li>A short evaluation report: which metrics you used, scores for two model configurations, and what you would change.</li>
+</ol>
+
+<h2>How the solution is evaluated</h2>
+<table>
+  <thead><tr><th>Area</th><th>What we look for</th><th>Weight</th></tr></thead>
+  <tbody>
+    <tr><td>Research quality</td><td>Sources are relevant, trustworthy and cited. The loop actually fills gaps instead of repeating the same queries.</td><td class="num">20%</td></tr>
+    <tr><td>Writing quality</td><td>The article follows the outline, uses the research, and matches the author voice and style rules. The review loop measurably improves the draft.</td><td class="num">25%</td></tr>
+    <tr><td>Agent design</td><td>Clear split between the two agents, sensible use of workflows versus autonomous tool calling, structured outputs where they matter.</td><td class="num">20%</td></tr>
+    <tr><td>Engineering</td><td>Config-driven, retries and timeouts, clean code, offline tests that pass.</td><td class="num">15%</td></tr>
+    <tr><td>Observability and evals</td><td>Traces for every run, LLM-judge metrics with a dataset split you can explain.</td><td class="num">10%</td></tr>
+    <tr><td>Documentation</td><td>Someone else can run it from the README alone.</td><td class="num">10%</td></tr>
+  </tbody>
+</table>
+
+<h2>Suggested milestones</h2>
+<ol class="milestones">
+  <li><strong>Brown on fixed research.</strong> Load a guideline and a hand-written <code>research.md</code>, write one draft with a single LLM call, save it.</li>
+  <li><strong>Profiles and the review loop.</strong> Add the writing profiles, a reviewer with structured output, the edit step and the early stop.</li>
+  <li><strong>Diagrams.</strong> Add a tool-calling step that finds diagram requests and generates Mermaid diagrams in parallel.</li>
+  <li><strong>Nova tools.</strong> Build the extraction, scraping, GitHub, YouTube and web search tools, and the file layout under a hidden <code>.nova</code> folder.</li>
+  <li><strong>Nova as an agent.</strong> Expose the tools over MCP, write the workflow prompt, and drive it from a terminal client.</li>
+  <li><strong>Integration.</strong> Expose Brown over MCP, then compose both servers behind one endpoint with an end-to-end prompt.</li>
+  <li><strong>Quality.</strong> Fake-model tests, Opik tracing, an evaluation dataset and two LLM-judge metrics.</li>
+</ol>
+
+<h2>What the interviewer will probe</h2>
+<ul>
+  <li>Why two agents and not one? Why is Brown a fixed workflow while Nova is driven by an LLM following a prompt?</li>
+  <li>How do you stop the writer from making things up that are not in the research?</li>
+  <li>How do you know the review loop makes the article better and not just different?</li>
+  <li>Scraped web pages are untrusted input. What stops a page from injecting instructions into your agents?</li>
+  <li>What does one article cost, and where would you cut cost first?</li>
+  <li>How would you scale this to 100 articles a day, and swap Gemini for another provider?</li>
+</ul>
+
+<h2>Stretch goals</h2>
+<ul>
+  <li>A human approval step between research and writing, where the author can drop or add sources.</li>
+  <li>Publish the final article to a CMS (for example a Notion or WordPress draft) through another MCP server.</li>
+  <li>Model-provider switch: run Brown on OpenAI or Groq by changing only the config.</li>
+  <li>Deploy Nova as a container (Docker, then AWS or Cloud Run) with Postgres to store research runs.</li>
+  <li>Cache scraped pages and search results so re-running research on a similar topic is cheaper.</li>
+</ul>
+
+<!-- awsq:bottom -->
+<div class="awsq awsq-bottom" role="navigation" aria-label="Capstone navigation (bottom)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 20 of 23 · Part 1 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../live-auction-house/pages/live-auction-ship/"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8</span></a><a class="awsq-home" href="../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="./pages/nova-brown-solution/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../live-auction-house/" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="done" href="../live-auction-house/pages/live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="done" href="../live-auction-house/pages/live-auction-ship/" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8">P19·3</a></li><li><a class="cur" href="./" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement" aria-current="page">P20·1</a></li><li><a class="" href="./pages/nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="" href="./pages/nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/balajiraghuram92/balajiraghuram92.github.io/tree/main/zips/Code/Capstone-Projects/nova-brown-blog-agent" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://balajiraghuram92.github.io/zips/Code/Zips/nova-brown-blog-agent-code.zip" download>⬇ Download all<small>.zip</small></a></div></div></div>
+<!-- /awsq:bottom -->
+<footer>
+  <p>Problem statement by Shivank Agarwal, Future with Shivank. The full walkthrough of one solution is in <a href="./pages/nova-brown-solution/">solution.html</a>, and the code is in this project folder.</p>
+</footer>
+</main>
+</body>
+</html>

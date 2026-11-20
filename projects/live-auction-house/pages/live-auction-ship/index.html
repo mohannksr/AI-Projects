@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="../../../../favicon.svg"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project 19 · Part 3 · Live Auction House · Ship it: Parts 5–8 · AWS AI Capstone</title>
+<meta name="description" content="Project 19, Part 3 of 3: let a fresh AI agent hunt a planted concurrency bug, close auctions through RabbitMQ with a transactional outbox, run issue-driven work in worktrees, take winner payment through a signed mock Stripe webhook and follow one auction across four services in Jaeger.">
+<meta name="author" content="Spencer Schneidenbach (course); page by AI-Infusion">
+<script>
+  try { var t = localStorage.getItem('fws-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+<link href="../../assets/css/fonts.css" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/css/3f21a261046cc900.css">
+<style>
+/* page-specific rules only (shared look lives in live-auction.css). This one rule is required by the blueprint checker: */
+main .awsq{--q-acc:var(--accent);--q-acc-t:var(--accent-soft);--q-acc-ink:var(--accent);--q-cur:var(--bid);--q-on:#fff;--q-card2:var(--surface-2);--q-rule:var(--line);padding:0;margin:18px 0;max-width:none}
+/* small layout helpers for this page: three cards, two cards, numbered walk-through */
+main .three,main .pair{display:grid;gap:12px;grid-template-columns:minmax(0,1fr);margin:14px 0}
+@media (min-width:640px){main .three{grid-template-columns:repeat(3,minmax(0,1fr))}main .pair{grid-template-columns:repeat(2,minmax(0,1fr))}}
+main .three>div,main .pair>div{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--pc,var(--accent));border-radius:12px;padding:12px 14px;min-width:0}
+main .three>div b,main .pair>div b{display:block;margin-bottom:4px}
+main ol.walk{list-style:none;margin:14px 0;padding:0;counter-reset:walk}
+main ol.walk>li{counter-increment:walk;position:relative;padding:2px 0 12px 44px;min-width:0}
+main ol.walk>li::before{content:counter(walk);position:absolute;left:0;top:0;width:30px;height:30px;border-radius:50%;background:#F2A93B;color:#1a1a1a;font:700 15px/30px var(--mono);text-align:center}
+main .box pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.55 var(--mono);margin:8px 0 0}
+main .stp{fill:#F2A93B;font:700 12px var(--mono)}
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<header class="hero" id="top">
+  <div class="hero-in">
+    <div class="hero-main">
+      <p class="kicker">AWS AI Capstone · Project 19 · Part 3 of 3</p>
+      <h1>Ship it: close, pay, and <em>trace</em> one auction</h1>
+      <p class="lede">The app works on a good day. This page is about the other days. A one-word bug that every test misses. A server that crashes halfway through telling Chen he won. A payment page that a browser could fake. A slow checkout nobody can explain. You'll steer the agent through each one, and finish by following Chen's GPU from his last bid to his payment in a single trace.</p>
+      <div class="chips"><span>Code review</span><span>RabbitMQ</span><span>Transactional outbox</span><span>Worktrees</span><span>Mock Stripe</span><span>Webhooks</span><span>OpenTelemetry</span><span>Jaeger</span></div>
+    </div>
+    <aside class="label" aria-label="About this part">
+      <dl>
+        <div><dt>You will</dt><dd>Find a hidden defect with a fresh agent · close auctions crash-safely through RabbitMQ · work from GitHub issues in a worktree · add winner checkout · trace one auction end to end</dd></div>
+        <div><dt>Time</dt><dd>about 1 h 35 min of video (lessons 19–27), 5–6 hours hands-on</dd></div>
+        <div><dt>You need</dt><dd>Page 2 done (Parts 2–4 in <code>workshop/</code>) · Edge · optional: a private GitHub repo and the GitHub CLI (<code>gh</code>) for the issues step</dd></div>
+      </dl>
+      <!-- decorative bid ticker: copy this block exactly -->
+      <svg class="ticker" viewbox="0 0 280 84" aria-hidden="true" focusable="false">
+        <path d="M14 12l14 14M20 6l14 14M8 18l14 14M24 20l-14 14" stroke="#F2A93B" stroke-width="3" stroke-linecap="round" fill="none"></path>
+        <text class="row" x="48" y="26">Asha  $101</text>
+        <text class="row" x="48" y="50">Ben   $102</text>
+        <text class="row" x="48" y="74">Chen  $107</text>
+      </svg>
+    </aside>
+  </div>
+  <nav class="route" aria-label="The three parts of Project 19">
+    <a href="../../"><b>Part 1</b><span>Set up and learn the agent</span><i>Course Parts 0–1 · grilling</i></a>
+    <a href="../live-auction-build/"><b>Part 2</b><span>Build it: Parts 1–4</span><i>Bids, the race, live updates</i></a>
+    <a href="./" aria-current="page"><b>Part 3</b><span>Ship it: Parts 5–8</span><i>Close, pay, trace</i></a>
+  </nav>
+</header>
+
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="On this page">
+    <h4>On this page</h4>
+    <a href="#recap">Where we are</a>
+    <a href="#part-5">Part 5 · The hidden-defect hunt</a>
+    <a class="lvl2" href="#spot-bug">Spot the bug</a>
+    <a class="lvl2" href="#sim-share">Why one word matters</a>
+    <a href="#part-6">Part 6 · Close and notify</a>
+    <a class="lvl2" href="#sim-close">Simulator: crash anywhere</a>
+    <a href="#issues">Issues, goals, worktrees, PRs</a>
+    <a href="#part-7">Part 7 · Winner checkout</a>
+    <a href="#part-8">Part 8 · Trace one auction</a>
+    <a class="lvl2" href="#sim-trace">Simulator: trace explorer</a>
+    <a href="#remember">What to remember</a>
+    <a href="#agents">Doing this with Claude Code or Antigravity</a>
+    <a href="#quiz">Check yourself</a>
+    <a href="#end">The end</a>
+  </nav>
+  <main id="main">
+<!-- awsq:top -->
+<style>
+.awsq{--q-card:var(--card,var(--surface,#fff));--q-card2:var(--card-2,var(--surface-2,#f3f3f0));--q-rule:var(--rule,var(--line,#ddd));
+  --q-ink:var(--ink,#1a1a1a);--q-muted:var(--muted,#666);--q-acc:var(--tool,var(--accent,#0b7f73));--q-acc-t:var(--tool-t,var(--accent-soft,#d6f2ee));
+  --q-acc-ink:var(--tool-ink,var(--accent,#075a51));--q-cur:var(--brain,var(--gold,#b07600));--q-on:var(--card,var(--surface,#fff));
+  --q-focus:var(--focus,var(--accent,#2958c4));--q-mono:var(--font-mono,"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace);
+  max-width:72rem;margin:18px auto;padding:0 40px;font-family:var(--font-body,inherit)}
+.awsq-box{background:var(--q-card);border:1px solid var(--q-rule);border-radius:12px;padding:12px 14px}
+.awsq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}
+.awsq-cap{display:block;margin:0;font:600 .7rem/1.4 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-row{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.awsq-l{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;padding:9px 13px;border-radius:9px;border:1px solid var(--q-rule);color:var(--q-ink);text-decoration:none;font-size:.95rem;line-height:1.3}
+a.awsq-l:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-next{text-align:right;align-items:flex-end}
+.awsq-d{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--q-acc)}
+.awsq-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+span.awsq-l{border-style:dashed;color:var(--q-muted)} span.awsq-l .awsq-d,span.awsq-l .awsq-t{color:var(--q-muted);font-weight:400}
+a.awsq-home{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:6px 12px;border-radius:9px;text-decoration:none;color:var(--q-ink);text-align:center;font-size:.85rem;line-height:1.3}
+a.awsq-home:hover{background:var(--q-card2);text-decoration:none}
+.awsq-home b{font:600 .7rem/1.3 var(--q-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-steps{display:flex;gap:5px;margin:11px 0 0;padding:0;list-style:none}
+.awsq-steps li{flex:1 1 0;margin:0;padding:0;list-style:none}
+.awsq-steps li::before{content:none}
+.awsq-steps a{display:block;text-align:center;padding:4px 0;border-radius:5px;font:600 .75rem/1.4 var(--q-mono);text-decoration:none;background:var(--q-card2);border:1px solid var(--q-rule);color:var(--q-muted)}
+.awsq-steps a.done{background:var(--q-acc-t);color:var(--q-acc-ink);border-color:transparent}
+.awsq-steps a.cur{background:var(--q-cur);color:var(--q-on);border-color:transparent}
+.awsq-steps a:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-recs{display:flex;flex-wrap:wrap;gap:8px;margin:11px 0 0}
+.awsq-rec{flex:1 1 220px;display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:9px;border:1px solid var(--q-acc);background:var(--q-acc-t);
+  color:var(--q-acc-ink);font-weight:700;font-size:.92rem;line-height:1.3;text-decoration:none}
+a.awsq-rec:hover{text-decoration:none;filter:brightness(.97)}
+.awsq-rec i{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--q-acc);color:var(--q-on);font-style:normal;font-size:.7rem}
+.awsq-rec small{margin-left:auto;font:600 .68rem/1.3 var(--q-mono);letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+.awsq-files{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+.awsq-files > b{margin-right:4px;font:600 .7rem/1.3 var(--q-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-fb{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-rule);color:var(--q-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-fb:hover{border-color:var(--q-acc);text-decoration:none}
+.awsq-fb small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+span.awsq-fb{border-style:dashed;color:var(--q-muted);font-weight:600}
+.awsq a:focus-visible{outline:2px solid var(--q-focus);outline-offset:2px}
+.awsq a.aih{flex:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:var(--q-acc);color:var(--q-on);
+  font:700 .74rem/1.2 var(--q-mono);letter-spacing:.04em;text-decoration:none;white-space:nowrap}
+.awsq a.aih:hover{filter:brightness(1.08);text-decoration:none}
+.awsq-ver{display:flex;justify-content:flex-end;margin:11px 0 0;padding:10px 0 0;border-top:1px dashed var(--q-rule)}
+a.awsq-vl{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--q-acc);color:var(--q-acc-ink);
+  font-size:.85rem;font-weight:700;line-height:1.3;text-decoration:none}
+a.awsq-vl:hover{background:var(--q-acc-t);text-decoration:none}
+.awsq-vl small{font:600 .66rem/1.3 var(--q-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--q-muted)}
+.awsq-bottom{padding:0 !important;margin:48px 0 8px;max-width:none}
+.awsq-inmain{padding:0 !important;margin:0 0 28px;max-width:none}
+@media (max-width:1100px){.awsq{padding:0 24px}}
+@media (max-width:640px){.awsq-steps{flex-wrap:wrap}.awsq-steps li{flex:1 0 28px}.awsq{padding:0 16px}.awsq-t{white-space:normal;overflow-wrap:anywhere}.awsq-row{grid-template-columns:1fr 1fr}a.awsq-home{grid-column:1 / -1;grid-row:1;flex-direction:row;gap:8px}a.awsq-rec small{display:none}}
+@media print{.awsq{display:none}}
+</style>
+<div class="awsq awsq-top awsq-inmain" role="navigation" aria-label="Capstone navigation (top)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 19 of 23 · Part 3 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../live-auction-build/"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4</span></a><a class="awsq-home" href="../../../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="../../../nova-brown-blog-writer/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../../../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../../../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../../../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../../../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../../../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../../../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../../../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../../../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../../../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../../../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../../../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../../../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../../../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../../../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../../../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../../../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../../../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../../../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../../" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="done" href="../live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="cur" href="./" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8" aria-current="page">P19·3</a></li><li><a class="" href="../../../nova-brown-blog-writer/" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="" href="../../../nova-brown-blog-writer/pages/nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="" href="../../../nova-brown-blog-writer/pages/nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../../../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../../../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../../../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/archive/refs/heads/master.zip">⬇ Download all<small>.zip from GitHub</small></a></div></div></div>
+<!-- /awsq:top -->
+    <details class="mobile-toc"><summary>☰ Contents</summary><a href="#recap">Where we are</a>
+<a href="#part-5">Part 5 · The hidden-defect hunt</a>
+<a class="lvl2" href="#spot-bug">Spot the bug</a>
+<a class="lvl2" href="#sim-share">Why one word matters</a>
+<a href="#part-6">Part 6 · Close and notify</a>
+<a class="lvl2" href="#sim-close">Simulator: crash anywhere</a>
+<a href="#issues">Issues, goals, worktrees, PRs</a>
+<a href="#part-7">Part 7 · Winner checkout</a>
+<a href="#part-8">Part 8 · Trace one auction</a>
+<a class="lvl2" href="#sim-trace">Simulator: trace explorer</a>
+<a href="#remember">What to remember</a>
+<a href="#agents">Doing this with Claude Code or Antigravity</a>
+<a href="#quiz">Check yourself</a>
+<a href="#end">The end</a>
+</details>
+
+    <!-- ============ PLAIN SECTION: where we are ============ -->
+    <section class="sec" id="recap">
+      <h2>Where we are</h2>
+      <ol class="course-route" aria-label="The eight course parts">
+        <li class="done" style="--pc:var(--p1)"><span class="n">1</span><b>Foundation</b><small>Is the stack alive?</small></li>
+        <li class="done" style="--pc:var(--p2)"><span class="n">2</span><b>Auctions &amp; bids</b><small>List, bid, check the rules</small></li>
+        <li class="done" style="--pc:var(--p3)"><span class="n">3</span><b>The race</b><small>Only one $102 wins</small></li>
+        <li class="done" style="--pc:var(--p4)"><span class="n">4</span><b>Live updates</b><small>Pages change by themselves</small></li>
+        <li class="here" style="--pc:var(--p5)"><span class="n">5</span><b>Hidden defect</b><small>Find the planted bug</small></li>
+        <li class="here" style="--pc:var(--p6)"><span class="n">6</span><b>Closing</b><small>Tell the winner, crash-proof</small></li>
+        <li class="here" style="--pc:var(--p7)"><span class="n">7</span><b>Checkout</b><small>Chen pays, provably</small></li>
+        <li class="here" style="--pc:var(--p8)"><span class="n">8</span><b>Tracing</b><small>Follow one auction end to end</small></li>
+      </ol>
+      <p>After Page 2 your <code>workshop/</code> has Parts 1–4: bids that are safe under a bidding war, close on time, and update live. Still in our story: Dana's used GPU, $100 start, closing at 6:00 pm, with Asha, Ben and Chen bidding; Chen's $107 is the last bid.</p>
+      <p>Three things are still missing: someone has to <strong>notice</strong> when the auction ends and tell Dana and Chen; Chen has to <strong>pay</strong>; and when something goes wrong across all these pieces, you need to <strong>see</strong> it. First, though, a test of everything you've learned about review.</p>
+      <div class="box warn"><span class="tag">Run one of Parts 6–8 at a time</span><p>Parts 6, 7 and 8 share one RabbitMQ queue (see Page 1's <a href="../../#ports">ports table</a>). Stop one with Ctrl+C before starting another, or their workers will take each other's messages.</p></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ STATION: PART 5 ============ -->
+    <section class="sec station" id="part-5" style="--pc:var(--p5)">
+      <header class="st-head">
+        <span class="st-badge">Part 5</span>
+        <h2>The hidden-defect hunt</h2>
+        <p class="st-goal"><b>Goal</b> A fresh agent, with no history and no reference copy, finds a planted concurrency bug from the code alone.</p>
+        <p class="st-meta"><span>Folder <code>part-5-hidden-defect-review</code></span><span>Web :5105 · API :3105 · Redis :56379</span><span>≈ 10 min of video</span></p>
+      </header>
+
+      <p>The exercise: one agent (a strong model) plants <strong>one</strong> subtle concurrency bug in a copy of Part 4, and deletes the tests that would catch it. Then a <strong>fresh chat</strong> with a smaller, cheaper model must find it by reading the code. It's a review drill: can an agent spot what every remaining test misses?</p>
+
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Decisions: the rules of the game (this part has no grilling)</p>
+        <div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Rule</th><th scope="col">Why</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Rule">Part 5 starts from Part 4 and changes <strong>one</strong> thing in the bid SQL.</td><td data-label="Why">One defect keeps the hunt fair and the answer checkable.</td></tr>
+            <tr><td data-label="Rule">Tests that would expose it are removed; everything else still passes.</td><td data-label="Why">Mimics real life: a green build is not proof.</td></tr>
+            <tr><td data-label="Rule">The investigator works in that folder only: no other parts, no reference copy, no git history.</td><td data-label="Why">Otherwise it just diffs against Part 4 and "finds" it.</td></tr>
+            <tr><td data-label="Rule">The investigator uses a smaller model than the planter.</td><td data-label="Why">Shows that a careful prompt matters more than raw power.</td></tr>
+            <tr><td data-label="Rule">No fixing during the hunt.</td><td data-label="Why">Finding and fixing are separate steps, each checked.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <p><strong>Set up the hunt.</strong> Two ways; pick one.</p>
+      <p><em>Option A · plant it yourself, like the course.</em> In <code>workshop</code>:</p>
+<div class="codebox"><div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div><pre><code>cd ~/code/workshop
+rsync -a --exclude node_modules --exclude test-results part-4-realtime-socketio-redis/ part-5-hidden-defect-review/</code></pre></div>
+
+      <div class="prompt-box" id="p5-prompt-plant">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: the planter</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p5-prompt-plant &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b>, strongest model, Effort: <b>High</b>. Afterwards, close this chat and don't reuse it.</p>
+<pre class="pb-text">In part-5-hidden-defect-review (a copy of part 4) do three things and nothing else:
+1. Change its database to auction_part_5 and ports to API 3105 / web 5105 everywhere.
+2. Introduce exactly one subtle concurrency defect in the PostgreSQL query path of the
+   bid endpoint, so that two simultaneous bids can again both be accepted against the
+   same price. The code must still compile, and a quick read should look reasonable.
+3. Remove only the tests and scripts that would catch it (for example the concurrency
+   API test and the headed bidding-war test and its npm script). Every other test must
+   still pass.
+
+Don't add comments, commit messages or doc changes that hint at the defect. Run npm test
+and the type checks and show me they pass. Then tell me what you changed in one line
+that I can hide from the investigator.</pre>
+      </div>
+
+      <p>Commit with a neutral message (<code>git commit -am "Part 5"</code>), then make a clean, history-free copy for the investigator:</p>
+<div class="codebox"><div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div><pre><code>mkdir -p ~/code/hunt
+cp ~/code/workshop/docker-compose.yml ~/code/hunt/
+cp -r ~/code/workshop/scripts ~/code/hunt/
+rsync -a --exclude node_modules ~/code/workshop/part-5-hidden-defect-review/ ~/code/hunt/part-5-hidden-defect-review/</code></pre></div>
+      <p><em>Option B · use the author's planted version.</em> Same copy, but from <code>reference</code>:</p>
+<div class="codebox"><div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div><pre><code>mkdir -p ~/code/hunt
+cp ~/code/reference/docker-compose.yml ~/code/hunt/
+cp -r ~/code/reference/scripts ~/code/hunt/
+rsync -a --exclude node_modules ~/code/reference/part-5-hidden-defect-review/ ~/code/hunt/part-5-hidden-defect-review/</code></pre></div>
+
+      <div class="prompt-box" id="p5-prompt-hunt">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: the investigator</span>
+          <span class="pb-tag">Review only</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p5-prompt-hunt &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> started in <code>~/code/hunt</code>, a <b>smaller</b> model (a mini or fast model), Effort: <b>High</b>.</p>
+<pre class="pb-text">There is a bidding concurrency bug somewhere in part-5-hidden-defect-review. Find it.
+
+Rules:
+- Look only inside part-5-hidden-defect-review. There is no other copy of the app and
+  no git history; don't search for one.
+- Don't edit any files.
+- You may read the docs in this folder (AGENTS.md, GRILL.md, CONTEXT.md) and compare
+  what they promise with what the code does.
+
+Report:
+1. the file and line of the defect,
+2. one concrete failure: two named bidders, the current price, what each request reads
+   and what ends up stored,
+3. why the remaining tests still pass,
+4. the smallest fix, and a test that would fail before the fix and pass after it.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><ul>
+          <li>It tells the investigator a bug <em>exists</em> and roughly where (bidding, concurrency). In real reviews you rarely know that much, but the drill is about method.</li>
+          <li>"Compare what the docs promise with what the code does" is the key hint without giving the answer: Part 5's <code>GRILL.md</code> still describes the Part 4 design.</li>
+          <li>Asking for a failing-then-passing test turns a finding into something provable (Page 2's three cards).</li>
+        </ul></details>
+        <details class="pb-steer"><summary>If the agent goes off track, steer with</summary>
+<pre class="pb-text">Focus on the bid endpoint's transaction. List every SQL statement it runs, in order,
+with the lock each one takes (if any). Then tell me which two concurrent requests could
+both get past the price check, and why the lock doesn't stop them.</pre>
+          <button type="button" class="copy" data-copy="this-pre">Copy</button></details>
+      </div>
+
+      <!-- mini game: the JS builds the two snippets and the clickable lines -->
+      <div class="sim" id="spot-bug" data-sim="spotbug" aria-labelledby="spot-bug-h"><span class="tag">Mini game</span><h4 id="spot-bug-h">Spot the bug</h4><p class="sim-intro">One line in Part 5 differs from Part 4. Click it.</p></div>
+
+      <details class="reveal"><summary><span>Reveal the answer</span></summary><div class="rv-body">
+        <p class="cr-file">Mini game snippets: <code>part-4-realtime-socketio-redis/server/src/app.ts</code> · lines 283–288 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-4-realtime-socketio-redis/server/src/app.ts#L283-L288" target="_blank" rel="noopener">GitHub</a> and <code>part-5-hidden-defect-review/server/src/app.ts</code> · lines 283–288 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-5-hidden-defect-review/server/src/app.ts#L283-L288" target="_blank" rel="noopener">GitHub</a>.</p>
+        <p><b><code>FOR UPDATE</code> became <code>FOR SHARE</code></b> (<code>part-5-hidden-defect-review/server/src/app.ts</code>, line 286; Part 4 has <code>FOR UPDATE</code> on the same line).</p>
+        <p>A <b>shared</b> lock only blocks people who want to <em>change</em> the row. Two bid transactions each asking for a shared lock both get it at once, so nothing queues. Both read $101, both pass the check, both insert $102. The race from Page 2 is back.</p>
+        <p>Why the tests stay green: the concurrency API test and the headed bidding war (and its npm script) were removed. Every other test sends bids one at a time.</p>
+        <p>The fix is one word, back to <code>FOR UPDATE</code>, plus restoring the test that proves it: three equal simultaneous bids must give exactly one 201.</p>
+        <p><a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-5-hidden-defect-review/server/src/app.ts#L283-L288" target="_blank" rel="noopener">Open Part 5 line 286 on GitHub</a> · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-4-realtime-socketio-redis/server/src/app.ts#L283-L288" target="_blank" rel="noopener">Part 4, same lines</a></p>
+      </div></details>
+
+      <div class="sim" id="sim-share" data-sim="bidwar" data-modes="on,share" aria-labelledby="sim-share-h"><span class="tag">Simulator</span><h4 id="sim-share-h">Why one word matters</h4><p class="sim-intro">Compare the exclusive lock with the shared one. Watch the lock badge: with FOR SHARE, Ben and Chen hold it at the same time.</p></div>
+
+      <div class="box key"><span class="tag">Key lesson</span><p>The planted bug passed every remaining test, compiled, and looked reasonable. What caught it was a reviewer that compared the <strong>promise</strong> (GRILL.md: "lock the auction row") with the <strong>code</strong>. Keep decision records honest and they become a review tool.</p></div>
+      <div class="box repo"><span class="tag">Repo note</span><p>Part 5's <code>GRILL.md</code> and <code>CONTEXT.md</code> are unchanged copies of Part 4's, and Part 5 has no <code>test:bidding-war</code> script. That's by design for the hunt, so don't copy Part 5 forward. <strong>Part 6 starts from Part 4.</strong></p></div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li>the investigator names <code>app.ts</code> line 286 (or the line with <code>FOR SHARE</code> in your planted version), with a two-bidder timeline;</li>
+          <li>it explains that the concurrency tests are missing;</li>
+          <li>it proposes <code>FOR UPDATE</code> and a three-equal-bids test.</li>
+        </ul>
+        <p>If the smaller model misses it, run the steer prompt; if it still misses, try the same prompt with a stronger model and compare. That comparison is part of the lesson.</p>
+      </div>
+
+      <div class="checkpoint" data-ck="p3:part-5">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 5</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="setup"> <span>I set up <code>~/code/hunt</code> with no git history and no other parts</span></label></li>
+          <li><label><input type="checkbox" data-id="fresh"> <span>The investigator ran in a new chat with a smaller model</span></label></li>
+          <li><label><input type="checkbox" data-id="found"> <span>It found the defect (or I noted which model did)</span></label></li>
+          <li><label><input type="checkbox" data-id="spot"> <span>I found line 286 in the mini game before revealing</span></label></li>
+          <li><label><input type="checkbox" data-id="share"> <span>I stepped through FOR UPDATE vs FOR SHARE in the simulator</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/finding-a-concurrency-defect/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Finding a Concurrency Defect</span><span class="w-time">03:09:10 · 10 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ STATION: PART 6 ============ -->
+    <section class="sec station" id="part-6" style="--pc:var(--p6)">
+      <header class="st-head">
+        <span class="st-badge">Part 6</span>
+        <h2>Close the auction and tell the winner, crash-proof</h2>
+        <p class="st-goal"><b>Goal</b> Within seconds of 6:00 pm, the system records that Chen won with $107, and Dana and Chen each see one pop-up, even if a process crashes at any point.</p>
+        <p class="st-meta"><span>Folder <code>part-6-async-close-rabbitmq</code></span><span>Web :5106 · API :3106 · Redis :56379 · RabbitMQ :56726 (UI :15676)</span><span>≈ 26 min of video</span></p>
+      </header>
+
+      <p>So far the deadline only stops new bids. Nothing <em>happens</em> at 6:00 pm. Part 6 adds the workflow a real auction site needs: record the outcome, then tell the people involved.</p>
+      <p>The design splits this into two background programs (called <strong>workers</strong>) so each has one job:</p>
+      <ul>
+        <li>The <strong>close worker</strong> polls the database every second for auctions past their deadline, and records each one's outcome: the winning bid, or "no bids".</li>
+        <li>The <strong>notification worker</strong> tells the seller and the winner, with a pop-up in any browser tab they have open.</li>
+      </ul>
+      <p>They're connected by <strong>RabbitMQ</strong>, a <em>message broker</em>: a program that holds messages in queues until a consumer takes and acknowledges them. The close worker publishes an <code>AuctionClosed</code> event; the notification worker consumes it.</p>
+      <p>The hard part is failure. What if the close worker records the close and crashes before publishing? The notification is lost. What if it publishes and crashes before noting that it did? It publishes again on restart, and Chen gets two pop-ups. Three ideas solve this, and the simulator below lets you crash each step:</p>
+      <ul>
+        <li><strong>Transactional outbox.</strong> Write the close <em>and</em> the event (into an <code>outbox_events</code> table) in <strong>one</strong> database transaction. Then publish from that table, marking each row published only after RabbitMQ confirms. A crash can delay a message; it can't lose one.</li>
+        <li><strong>At-least-once delivery.</strong> The broker and the outbox may deliver a message more than once, never zero times.</li>
+        <li><strong>Idempotency.</strong> Every step is safe to repeat: one close per auction, one outbox row per close, one delivery per (event, person), and a notification ID the browser remembers.</li>
+      </ul>
+
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Decisions you agree in the grilling</p>
+        <div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Question</th><th scope="col">Decision</th><th scope="col">Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Question">What ends bidding?</td><td data-label="Decision">The <strong>deadline</strong>. The close is recorded afterwards; worker delay never extends bidding.</td><td data-label="Why it matters">Part 3's clock check still rules.</td></tr>
+            <tr><td data-label="Question">Who decides the winner?</td><td data-label="Decision">The close reads <strong>committed</strong> bids in PostgreSQL: highest amount, earliest on a tie. It records the winning bid in the same operation.</td><td data-label="Why it matters">One authoritative outcome.</td></tr>
+            <tr><td data-label="Question">No bids?</td><td data-label="Decision">Still closed, with an <code>AuctionClosed</code> event and no winner. The seller is told; no winner pop-up.</td><td data-label="Why it matters">Dana always learns the result.</td></tr>
+            <tr><td data-label="Question">Two close workers running?</td><td data-label="Decision">Each polls every second and claims due auctions in small batches with <code>FOR UPDATE SKIP LOCKED</code>; a unique close-per-auction constraint is the final guard.</td><td data-label="Why it matters">Workers never close the same auction twice, and never block each other.</td></tr>
+            <tr><td data-label="Question">How are close and event written?</td><td data-label="Decision">In <strong>one transaction</strong>: the close row and an outbox row. A publisher sends pending outbox rows and marks them published only after RabbitMQ's <strong>publisher confirm</strong>.</td><td data-label="Why it matters">A crash between "closed" and "published" can't lose the event (the outbox).</td></tr>
+            <tr><td data-label="Question">Delivery guarantee?</td><td data-label="Decision">At-least-once everywhere; idempotent at every layer: one close per auction, one outbox event per close, one delivery per (event, recipient), one stable notification ID to the browser.</td><td data-label="Why it matters">Duplicates are expected and harmless.</td></tr>
+            <tr><td data-label="Question">When is a message handled?</td><td data-label="Decision">Manual <strong>acknowledgement</strong> after the deliveries are safely recorded. Failure → requeue.</td><td data-label="Why it matters">Unacked messages come back.</td></tr>
+            <tr><td data-label="Question">How is a browser addressed?</td><td data-label="Decision">Each tab joins a Socket.IO room for its selected demo user (<code>user:&lt;id&gt;</code>) and switches rooms when the user changes. Every open tab of that user gets the pop-up.</td><td data-label="Why it matters">Pop-ups reach Dana and Chen, nobody else. Still demo identity, not authentication.</td></tr>
+            <tr><td data-label="Question">Offline users?</td><td data-label="Decision">Live only. Someone offline at the time doesn't get it later.</td><td data-label="Why it matters">Keeps scope small; the auction page still shows the final result.</td></tr>
+            <tr><td data-label="Question">Pop-up copy?</td><td data-label="Decision">Winner: "You won [title] with a bid of [amount]." Seller: "Your auction for [title] ended. [winner] won with [amount]." No bids: "Your auction for [title] ended without any bids." Buttons: View auction, Dismiss. Stays open until dismissed.</td><td data-label="Why it matters">Clear, role-specific text.</td></tr>
+            <tr><td data-label="Question">Several outcomes at once?</td><td data-label="Decision">Queued in deadline order, shown one at a time. Each tab remembers handled IDs and never shows one twice.</td><td data-label="Why it matters">No stack of overlapping modals.</td></tr>
+            <tr><td data-label="Question">Messaging extras?</td><td data-label="Decision">Durable exchange and queue, persistent messages, confirms, manual acks, republishing pending outbox rows. <strong>No</strong> dead-letter queue or retry backoff yet.</td><td data-label="Why it matters">Only what the outbox needs.</td></tr>
+          </tbody>
+        </table></div>
+        <p class="src">Source: <code>part-6-async-close-rabbitmq/GRILL.md</code>, both rounds.</p>
+      </div>
+
+      <p><strong>Start Part 6 from Part 4, not Part 5:</strong></p>
+<div class="codebox"><div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div><pre><code>cd ~/code/workshop
+rsync -a --exclude node_modules --exclude test-results part-4-realtime-socketio-redis/ part-6-async-close-rabbitmq/
+git add -A &amp;&amp; git commit -m "Part 6: start from a copy of Part 4"</code></pre></div>
+
+      <div class="prompt-box" id="p6-prompt-plan">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: plan</span>
+          <span class="pb-tag">Plan first</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p6-prompt-plan &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> in <code>~/code/workshop</code>. Plan mode. Effort: <b>High or extra high</b>.</p>
+<pre class="pb-text">Part 6 of the auction site. Work only in part-6-async-close-rabbitmq, a copy of part 4
+(not part 5). First switch it to database auction_part_6 and ports API 3106 / web 5106
+everywhere, including Playwright config and tests.
+
+Goal: after an auction's deadline passes, a separate Auction Close Worker records the
+outcome (the winning accepted bid, or no bids). A separate Notification Worker, connected
+to it through RabbitMQ (the rabbitmq service in the root docker-compose.yml, host port
+56726), tells the seller and the winner with a pop-up over our existing Socket.IO setup.
+The API keeps owning HTTP and browser sockets.
+
+Non-negotiables:
+- The deadline is the bidding cutoff. Worker delay must never extend bidding.
+- Nothing may be lost if any process crashes at any point, and nobody may see the
+  same outcome pop-up twice. Assume RabbitMQ delivers at least once.
+- Keep RabbitMQ to what this needs. No dead-letter queues or retry scheduling yet.
+
+Grill me with docs, max 2 rounds of up to 10 questions, each with your recommendation.
+Cover at least: who is notified (including auctions with no bids), what happens to users
+who are offline, how the close is claimed if two close workers run, how the close and its
+event are written so a crash can't orphan either, when a message counts as published and
+when as handled, how duplicates are stopped at each layer, how a browser is addressed
+(which user, which tabs), the exact pop-up wording, and what happens with several
+outcomes at once.
+
+Write GRILL.md, extend CONTEXT.md, and add an ADR (docs/adr/0001-...) for the outbox
+decision. Propose 2 slices and wait for "approved".</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><ul>
+          <li>It states the failure guarantees as requirements ("nothing lost, nobody sees it twice, at-least-once") instead of naming a pattern. A good agent then <em>proposes</em> the transactional outbox itself, and you can check it reasons its way there.</li>
+          <li>The question list forces the awkward cases (no bids, offline users, two workers) into the open before any code exists.</li>
+        </ul></details>
+        <details class="pb-steer"><summary>If the agent goes off track, steer with</summary>
+<pre class="pb-text">Your design publishes to RabbitMQ directly after committing the close. If the worker
+crashes between those two steps, the notification is lost. Write the close and an
+outbox row in the same transaction, publish from the outbox, and mark a row published
+only after a publisher confirm. Update GRILL.md and the ADR.</pre>
+          <button type="button" class="copy" data-copy="this-pre">Copy</button></details>
+      </div>
+
+      <div class="prompt-box" id="p6-prompt-build">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: build</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p6-prompt-build &gt; .pb-text">Copy</button>
+        </div>
+<pre class="pb-text">Approved. Build Slice 1, then stop for my review; I'll say when to build Slice 2.
+
+Slice 1, automatic authoritative close:
+- Migration: auction_closes (one per auction, optional winning bid) and outbox_events
+  (one AuctionClosed per auction, published_at null until confirmed).
+- Close worker process: every second, in one transaction, claim due unclosed auctions
+  with FOR UPDATE SKIP LOCKED (bounded batch), pick the winner from committed bids,
+  insert the close and its outbox row, commit.
+- Auction reads expose closedAt and the winning bid; the detail page shows the final
+  outcome after close.
+- Tests: exact-deadline eligibility, highest bid wins, no-bid close, close + outbox are
+  atomic, re-running closes nothing twice, two competing workers claim disjoint sets.
+
+Slice 2, live outcome pop-ups:
+- Publisher: durable exchange and queue, persistent messages, wait for confirms, then
+  mark outbox rows published; republish rows still pending after a restart.
+- Notification worker: validate the message, insert one delivery per (event, recipient)
+  with ON CONFLICT DO NOTHING, emit each unsent delivery to user:<span class="ph">&lt;id&gt;</span> through Redis with
+  the delivery ID as notification ID, mark it emitted, then ack. On error, nack and
+  requeue.
+- Browser: join user:<span class="ph">&lt;id&gt;</span>; queue role-specific modals by deadline; never show an ID twice
+  per tab.
+- Tests: winner, seller, no-bid seller, redelivery, duplicate socket event, user switch,
+  ordering, every open tab of the recipient.
+
+Add the workers to npm start. After each slice run all tests, both type checks and the
+headed bidding war, and leave the windows on the final pop-ups.</pre>
+      </div>
+
+      <!-- simulator 3 -->
+      <div class="sim" id="sim-close" data-sim="close" aria-labelledby="sim-close-h"><span class="tag">Simulator</span><h4 id="sim-close-h">Simulator: crash anywhere</h4><p class="sim-intro">6:00 pm. Chen's $107 leads. Step through the close, or press Crash here at any step and see why nothing is lost and nobody gets two pop-ups.</p></div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li><code>npm start</code> starts four processes: <code>api</code>, <code>close-worker</code>, <code>notification-worker</code>, <code>web</code>;</li>
+          <li>leave an auction past its deadline: within a couple of seconds the detail page shows the final result (winner and amount), and bidding stays disabled;</li>
+          <li>open Dana's and Chen's windows: Dana sees "Your auction for Used GPU ended. Chen won with $107.", Chen sees "You won Used GPU with a bid of $107." An unrelated user (Asha) sees nothing;</li>
+          <li>the RabbitMQ management page at http://localhost:15676 (user and password are both <code>auction</code>, from <code>docker-compose.yml</code>) shows the exchange <code>auction.events</code>, the queue <code>auction.notifications</code> with <strong>1 consumer</strong>, and messages flowing;</li>
+          <li>the headed bidding war ends with the pop-ups showing in the seller and winner windows.</li>
+        </ul>
+
+        <figure class="wire"><svg viewbox="0 0 700 300" role="img" aria-label="Two windows at 6:00 pm: Dana's shows 'Your auction for Used GPU ended. Chen won with $107.', Chen's shows 'You won Used GPU with a bid of $107.' Each has View auction and Dismiss buttons">
+          <rect class="bx" x="10" y="10" width="330" height="280" rx="10"></rect>
+          <rect class="bx" x="360" y="10" width="330" height="280" rx="10"></rect>
+          <text class="mut" x="24" y="34">Dana</text>
+          <text class="mut" x="374" y="34">Chen</text>
+          <rect x="24" y="44" width="302" height="236" rx="6" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="40" y="70" style="fill:var(--muted)">Used GPU · auction page (dimmed)</text>
+          <rect x="60" y="90" width="230" height="180" rx="10" style="fill:var(--surface);stroke:var(--accent)"></rect>
+          <text x="80" y="120" style="font-weight:700;font-size:16px">Auction ended</text>
+          <text x="80" y="146">Your auction for Used GPU ended.</text>
+          <text x="80" y="164">Chen won with</text>
+          <text class="price" x="80" y="196" style="font-size:18px">$107</text>
+          <rect x="76" y="216" width="92" height="36" rx="8" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="92" y="239">View auction</text>
+          <rect x="178" y="216" width="92" height="36" rx="8" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="204" y="239">Dismiss</text>
+          <rect x="384" y="44" width="302" height="236" rx="6" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="400" y="70" style="fill:var(--muted)">Used GPU · auction page (dimmed)</text>
+          <rect x="410" y="90" width="230" height="180" rx="10" style="fill:var(--surface);stroke:var(--accent)"></rect>
+          <text x="430" y="120" style="font-weight:700;font-size:16px">You won! 🎉</text>
+          <text x="430" y="146">You won Used GPU with a bid of</text>
+          <text class="price" x="430" y="196" style="font-size:18px">$107</text>
+          <rect x="426" y="216" width="92" height="36" rx="8" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="442" y="239">View auction</text>
+          <rect x="528" y="216" width="92" height="36" rx="8" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="554" y="239">Dismiss</text>
+        </svg></figure>
+
+        <figure class="wire"><svg viewbox="0 0 700 220" role="img" aria-label="RabbitMQ management page, Queues tab: auction.notifications, durable, 1 consumer, 0 ready, 0 unacked">
+          <rect class="bx" x="10" y="10" width="680" height="200" rx="8"></rect>
+          <text x="30" y="36" style="font-weight:700">Queues</text>
+          <text x="30" y="72" class="mut" style="font-size:12px">Name</text><text x="190" y="72" class="mut" style="font-size:12px">Type</text><text x="262" y="72" class="mut" style="font-size:12px">Features</text><text x="330" y="72" class="mut" style="font-size:12px">State</text><text x="420" y="72" class="mut" style="font-size:12px">Ready</text><text x="490" y="72" class="mut" style="font-size:12px">Unacked</text><text x="570" y="72" class="mut" style="font-size:12px">Total</text><text x="630" y="72" class="mut" style="font-size:12px">Consumers</text>
+          <line x1="20" y1="82" x2="690" y2="82" style="stroke:var(--line)"></line>
+          <text x="30" y="110" style="font-size:12.5px">auction.notifications</text><text x="190" y="110">classic</text><text x="262" y="110">D</text><text x="330" y="110">running</text><text class="okt" x="420" y="110">0</text><text class="okt" x="490" y="110">0</text><text x="570" y="110">0</text><text class="price" x="640" y="110">1</text>
+        </svg>
+          <figcaption>Ready 0 and Unacked 0 means every message was handled and acknowledged.</figcaption></figure>
+      </div>
+
+      <div class="box stretch"><span class="tag">Stretch exercise: dead letters</span><p>A message that always fails (say, a bug in the worker) is nacked and requeued forever. Ask the agent to design, but not yet build, a dead-letter queue with a retry limit, as a second ADR. Compare it with the decision to defer it.</p></div>
+
+      <!-- view code: block 5 -->
+      <details class="solution-reveal code-reveal"><summary>View code: claiming due auctions with SKIP LOCKED <span class="cr-path">auctionClose.ts · 70–84</span></summary><div class="sol">
+        <p class="cr-file"><code>part-6-async-close-rabbitmq/server/src/auctionClose.ts</code> · lines 70–84 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-6-async-close-rabbitmq/server/src/auctionClose.ts#L70-L84" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">auctionClose.ts · lines 70–84</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="70">    const due = await client.query&lt;DueAuctionRow&gt;(</span>
+<span class="l" data-n="71">      `SELECT a.id::text, a.slug, a.title, a.ends_at,</span>
+<span class="l" data-n="72">         seller.id AS seller_id, seller.display_name AS seller_display_name,</span>
+<span class="l" data-n="73">         seller.handle AS seller_handle</span>
+<span class="l" data-n="74">       FROM auctions a</span>
+<span class="l" data-n="75">       JOIN users seller ON seller.id = a.seller_user_id</span>
+<span class="l hl" data-n="76">       WHERE a.ends_at &lt;= $1</span>
+<span class="l hl" data-n="77">         AND NOT EXISTS (</span>
+<span class="l hl" data-n="78">           SELECT 1 FROM auction_closes close WHERE close.auction_id = a.id</span>
+<span class="l hl" data-n="79">         )</span>
+<span class="l hl" data-n="80">       ORDER BY a.ends_at, a.id</span>
+<span class="l hl" data-n="81">       FOR UPDATE OF a SKIP LOCKED</span>
+<span class="l hl" data-n="82">       LIMIT $2`,</span>
+<span class="l" data-n="83">      [now, batchSize],</span>
+<span class="l" data-n="84">    );</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>76</code> Due means "deadline at or before now"…</li>
+          <li><code>77–79</code> …and not closed yet.</li>
+          <li><code>81</code> <code>FOR UPDATE OF a</code> locks each claimed auction row for this transaction. <code>SKIP LOCKED</code> means a second worker running the same query <strong>skips</strong> rows the first one holds, instead of waiting. Two workers split the work.</li>
+          <li><code>82</code> A bounded batch (default 50), so one poll never grabs everything. Bonus: this lock is the same row lock bids take (Part 3), so a close and a last-millisecond bid can't interleave.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: close and outbox in one transaction <span class="cr-path">auctionClose.ts · 123–132</span></summary><div class="sol">
+        <p class="cr-file"><code>part-6-async-close-rabbitmq/server/src/auctionClose.ts</code> · lines 123–132 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-6-async-close-rabbitmq/server/src/auctionClose.ts#L123-L132" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">auctionClose.ts · lines 123–132</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l hl" data-n="123">      await client.query(</span>
+<span class="l hl" data-n="124">        `INSERT INTO auction_closes (auction_id, closed_at, winning_bid_id)</span>
+<span class="l hl" data-n="125">         VALUES ($1, $2, $3)`,</span>
+<span class="l hl" data-n="126">        [auction.id, now, winner?.id ?? null],</span>
+<span class="l hl" data-n="127">      );</span>
+<span class="l hl" data-n="128">      await client.query(</span>
+<span class="l hl" data-n="129">        `INSERT INTO outbox_events (id, event_type, auction_id, payload, occurred_at)</span>
+<span class="l hl" data-n="130">         VALUES ($1, 'AuctionClosed', $2, $3::jsonb, $4)`,</span>
+<span class="l hl" data-n="131">        [eventId, auction.id, JSON.stringify(event), now],</span>
+<span class="l hl" data-n="132">      );</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>123–127</code> the outcome (<code>winning_bid_id</code> is null for a no-bid auction).</li>
+          <li><code>128–132</code> the <code>AuctionClosed</code> event, stored as JSON in the outbox, in the <strong>same</strong> transaction (the <code>BEGIN</code> is at line 69, the <code>COMMIT</code> at line 141). Either both rows exist or neither does. The migration makes <code>auction_id</code> the primary key of <code>auction_closes</code> and <code>(event_type, auction_id)</code> unique in the outbox, so a second close for the same auction fails instead of duplicating.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: confirm before marking published <span class="cr-path">outboxPublisher.ts · 58–83</span></summary><div class="sol">
+        <p class="cr-file"><code>part-6-async-close-rabbitmq/server/src/outboxPublisher.ts</code> · lines 58–83 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-6-async-close-rabbitmq/server/src/outboxPublisher.ts#L58-L83" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">outboxPublisher.ts · lines 58–83</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="58">    for (const row of pending.rows) {</span>
+<span class="l" data-n="59">      const event = auctionClosedEventSchema.parse(row.payload);</span>
+<span class="l" data-n="60">      channel.publish(</span>
+<span class="l" data-n="61">        auctionEventsExchange,</span>
+<span class="l" data-n="62">        auctionClosedRoutingKey,</span>
+<span class="l" data-n="63">        Buffer.from(JSON.stringify(event)),</span>
+<span class="l" data-n="64">        {</span>
+<span class="l" data-n="65">          persistent: true,</span>
+<span class="l" data-n="66">          contentType: 'application/json',</span>
+<span class="l" data-n="67">          messageId: row.id,</span>
+<span class="l" data-n="68">          type: event.eventType,</span>
+<span class="l" data-n="69">          timestamp: Math.floor(now.getTime() / 1_000),</span>
+<span class="l" data-n="70">        },</span>
+<span class="l" data-n="71">      );</span>
+<span class="l" data-n="72">    }</span>
+<span class="l hl" data-n="73">    await channel.waitForConfirms();</span>
+<span class="l" data-n="74"></span>
+<span class="l" data-n="75">    const eventIds = pending.rows.map((row) =&gt; row.id);</span>
+<span class="l hl" data-n="76">    await client.query(</span>
+<span class="l hl" data-n="77">      `UPDATE outbox_events</span>
+<span class="l hl" data-n="78">       SET published_at = $1</span>
+<span class="l hl" data-n="79">       WHERE id = ANY($2::uuid[])`,</span>
+<span class="l hl" data-n="80">      [now, eventIds],</span>
+<span class="l hl" data-n="81">    );</span>
+<span class="l" data-n="82">    await client.query('COMMIT');</span>
+<span class="l" data-n="83">    return eventIds;</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>59</code> Each payload is re-validated with the same Zod schema the consumer uses.</li>
+          <li><code>60–71</code> Publish with <code>persistent: true</code> (survives a broker restart) and <code>messageId</code> set to the outbox row's ID, so every copy of the message carries the same identity.</li>
+          <li><code>73</code> <code>waitForConfirms()</code>: wait until RabbitMQ says it has the messages. If this throws, the transaction rolls back and the rows stay pending for the next poll.</li>
+          <li><code>76–82</code> Only then mark them published and commit. A crash between 73 and 82 means a re-publish later: a duplicate, never a loss. The consumer is built for that.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: the idempotent delivery <span class="cr-path">notificationDelivery.ts · 42–49, 59–84</span></summary><div class="sol">
+        <p class="cr-file"><code>part-6-async-close-rabbitmq/server/src/notificationDelivery.ts</code> · lines 42–49 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-6-async-close-rabbitmq/server/src/notificationDelivery.ts#L42-L49" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">notificationDelivery.ts · lines 42–49</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="42">    for (const recipient of recipients) {</span>
+<span class="l" data-n="43">      await client.query(</span>
+<span class="l" data-n="44">        `INSERT INTO notification_deliveries (</span>
+<span class="l" data-n="45">           id, outbox_event_id, recipient_user_id, recipient_role, created_at</span>
+<span class="l" data-n="46">         ) VALUES ($1, $2, $3, $4, $5)</span>
+<span class="l hl" data-n="47">         ON CONFLICT (outbox_event_id, recipient_user_id) DO NOTHING`,</span>
+<span class="l" data-n="48">        [randomUUID(), event.eventId, recipient.userId, recipient.role, now],</span>
+<span class="l" data-n="49">      );</span>
+</code></pre>
+        </div>
+        <p class="cr-file"><code>part-6-async-close-rabbitmq/server/src/notificationDelivery.ts</code> · lines 59–84 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-6-async-close-rabbitmq/server/src/notificationDelivery.ts#L59-L84" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">notificationDelivery.ts · lines 59–84</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="59">  const pending = await pool.query&lt;PendingDeliveryRow&gt;(</span>
+<span class="l" data-n="60">    `SELECT id::text, recipient_user_id, recipient_role</span>
+<span class="l" data-n="61">     FROM notification_deliveries</span>
+<span class="l hl" data-n="62">     WHERE outbox_event_id = $1 AND emitted_at IS NULL</span>
+<span class="l" data-n="63">     ORDER BY created_at, id`,</span>
+<span class="l" data-n="64">    [event.eventId],</span>
+<span class="l" data-n="65">  );</span>
+<span class="l" data-n="66">  const emitted: string[] = [];</span>
+<span class="l" data-n="67">  for (const delivery of pending.rows) {</span>
+<span class="l" data-n="68">    await emit(delivery.recipient_user_id, {</span>
+<span class="l" data-n="69">      notificationId: delivery.id,</span>
+<span class="l" data-n="70">      eventId: event.eventId,</span>
+<span class="l" data-n="71">      recipientUserId: delivery.recipient_user_id,</span>
+<span class="l" data-n="72">      recipientRole: delivery.recipient_role,</span>
+<span class="l" data-n="73">      slug: event.slug,</span>
+<span class="l" data-n="74">      title: event.title,</span>
+<span class="l" data-n="75">      endsAt: event.endsAt,</span>
+<span class="l" data-n="76">      closedAt: event.closedAt,</span>
+<span class="l" data-n="77">      winner: event.winner,</span>
+<span class="l" data-n="78">    });</span>
+<span class="l" data-n="79">    await pool.query(</span>
+<span class="l" data-n="80">      `UPDATE notification_deliveries</span>
+<span class="l" data-n="81">       SET emitted_at = $1</span>
+<span class="l" data-n="82">       WHERE id = $2 AND emitted_at IS NULL`,</span>
+<span class="l" data-n="83">      [now, delivery.id],</span>
+<span class="l" data-n="84">    );</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>43–47</code> One row per (event, recipient). <code>ON CONFLICT … DO NOTHING</code> turns a redelivered message into a no-op instead of an error. The table's unique constraint does the deduplication; no "have I seen this?" query is needed.</li>
+          <li><code>59–65</code> Then it picks deliveries <strong>not yet emitted</strong> for this event. On a redelivery after a crash, this finds exactly the ones still owed.</li>
+          <li><code>68–78</code> Each is emitted with the delivery's own ID as <code>notificationId</code>. If a crash hits after the emit but before line 79, the same ID is emitted again, and the browser tab, which remembers handled IDs, ignores it.</li>
+          <li><code>79–84</code> Marked emitted. The worker acknowledges the RabbitMQ message only after this function returns (in <code>notification-worker.ts</code>).</li>
+        </ol>
+      </div></details>
+
+      <div class="checkpoint" data-ck="p3:part-6">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 6</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="from4"> <span>Part 6 started from Part 4, on 3106/5106 with <code>auction_part_6</code></span></label></li>
+          <li><label><input type="checkbox" data-id="close"> <span>An ended auction shows its final result without a reload</span></label></li>
+          <li><label><input type="checkbox" data-id="popups"> <span>Dana and Chen each saw exactly one pop-up; Asha saw none</span></label></li>
+          <li><label><input type="checkbox" data-id="rabbit"> <span>The RabbitMQ UI shows <code>auction.notifications</code> with one consumer</span></label></li>
+          <li><label><input type="checkbox" data-id="crash"> <span>I crashed every step in the simulator and can explain each recovery</span></label></li>
+          <li><label><input type="checkbox" data-id="adr"> <span><code>docs/adr/0001-…</code> explains why the outbox exists</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/closing-auction-plan/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Closing Auction Plan</span><span class="w-time">03:18:41 · 16 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/messaging-with-rabbitmq/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Messaging with RabbitMQ</span><span class="w-time">03:34:38 · 10 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ PLAIN SECTION: issues, goals, worktrees, PRs ============ -->
+    <section class="sec" id="issues">
+      <p class="eyebrow">Working like a team</p>
+      <h2>Issues, goals, worktrees and pull requests</h2>
+      <p>Up to now you've driven the agent message by message. Real teams work from an <strong>issue tracker</strong>: a list of problems and requests, each with an owner. The course shows how to hand an agent a whole issue and let it run: it reads the issue, investigates, and opens a <strong>pull request</strong> (PR) for you to review, working on its own branch in a separate folder.</p>
+
+      <p><strong>Two kinds of issue</strong></p>
+      <div class="pair">
+        <div><b>A question</b>Issue #2: "Should we use an ORM instead of raw SQL?" → the deliverable is a written recommendation: an <strong>ADR</strong> (<em>architecture decision record</em>: a short file saying what was decided, why, and what was rejected).</div>
+        <div><b>A change</b>Issue #3: "Move Part 6's data access to Drizzle" → the deliverable is code: a PR on its own branch, reviewed before merging.</div>
+      </div>
+      <p>(Drizzle is a TypeScript ORM. An <em>ORM</em> maps tables to objects so you write less SQL by hand. Part 1 chose plain SQL deliberately; the issue asks whether that still holds.)</p>
+
+      <p><strong>Worktrees.</strong> A <em>git worktree</em> is a second working folder for the same repo, checked out on a different branch. The agent can work in it while your main folder stays untouched:</p>
+<div class="codebox"><div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div><pre><code>cd ~/code/workshop
+git worktree add ../workshop-orm -b issue-2-orm-question
+git worktree add ../workshop-drizzle -b issue-3-drizzle-part-6</code></pre></div>
+      <p>Remove one when you're done: <code>git worktree remove ../workshop-orm</code>.</p>
+      <div class="box warn"><span class="tag">A worktree separates files, not infrastructure</span><p>Each worktree has its own files and branch, but they all share your PostgreSQL databases, ports, Redis and RabbitMQ. Two worktrees running Part 6 at once fight over port 3106, <code>auction_part_6</code> and the queue. Run one demo at a time, or give the experiment its own database name and ports.</p></div>
+
+      <p><strong>Goals.</strong> Codex has a <strong>goal</strong> feature for long tasks: you give one broad objective with success criteria, and it works through it with fewer check-ins. The instructor's advice: goals work best with a broad task, clear success criteria, and an issue tracker it can read and update. In other agents, the same thing is just a well-formed long prompt.</p>
+
+      <div class="prompt-box" id="p7-prompt-goal">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: the question issue</span>
+          <span class="pb-tag">Goal</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p7-prompt-goal &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">Start the agent in <code>~/code/workshop-orm</code>. Codex: prefix with <code>/goal</code>. Others: send as-is. Needs <code>gh</code> signed in to your <b>private</b> workshop repo.</p>
+<pre class="pb-text">/goal Answer GitHub issue #2 in <span class="ph">&lt;YOUR-REPO&gt;</span> ("Should we use an ORM instead of raw SQL?").
+
+Use the GitHub CLI to read the issue and its comments. Investigate part-6-async-close-
+rabbitmq only: how it uses SQL today (row locks, SKIP LOCKED, ON CONFLICT, the outbox
+transaction) and what each candidate ORM (at least Drizzle and Prisma) would make easier
+or harder for exactly those features.
+
+Success criteria:
+- a new ADR in part-6-async-close-rabbitmq/docs/adr/ with context, options considered,
+  the decision and its consequences, citing files and lines;
+- no application code changed;
+- a pull request from this branch that links issue #2, with a 5-line summary;
+- a comment on issue #2 pointing to the PR.
+
+Ask me only if the issue is ambiguous. Don't merge anything.</pre>
+      </div>
+
+      <div class="prompt-box" id="p7-prompt-change">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: the change issue</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p7-prompt-change &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">In <code>~/code/workshop-drizzle</code>. Only run this if you decide to go ahead after reading the ADR.</p>
+<pre class="pb-text">Implement GitHub issue #3 in <span class="ph">&lt;YOUR-REPO&gt;</span>: move part-6-async-close-rabbitmq's data access
+to Drizzle, following the ADR from issue #2.
+
+Keep behaviour identical: the bid transaction with FOR UPDATE, the close worker's
+FOR UPDATE SKIP LOCKED claim, the close + outbox transaction, publisher confirms, and
+ON CONFLICT DO NOTHING deliveries. Where Drizzle can't express a query cleanly, keep raw
+SQL for that query and say why in a comment.
+
+Before opening the PR, run npm test, both type checks and npm run test:bidding-war, and
+paste the exact commands and their final output into the PR description. Open the PR
+against main, link issue #3, and don't merge.</pre>
+      </div>
+
+      <div class="box note"><span class="tag">Before you approve a PR</span><ul>
+        <li>Does it do what the issue asked, and only that? (Scope creep is the most common agent PR problem.)</li>
+        <li>Are the guarantees intact: row lock on bids, <code>SKIP LOCKED</code> claim, close + outbox in one transaction, confirms before "published", <code>ON CONFLICT DO NOTHING</code>?</li>
+        <li>Which checks <strong>actually ran</strong>? Ask for the bidding-war command and its output in the PR, not "tests pass".</li>
+        <li>Are the docs updated (GRILL.md, CONTEXT.md, ADRs) where decisions changed?</li>
+        <li>Would you be able to revert it cleanly?</li>
+      </ul></div>
+
+      <div class="prompt-box" id="p7-prompt-prreview">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: review the PR</span>
+          <span class="pb-tag">Review only</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p7-prompt-prreview &gt; .pb-text">Copy</button>
+        </div>
+<pre class="pb-text">Review pull request #<span class="ph">&lt;N&gt;</span> in <span class="ph">&lt;YOUR-REPO&gt;</span> with the GitHub CLI (diff, description, linked
+issue). Don't edit or merge. Check: does it do what the issue asks and nothing else; are
+the bid row lock, the SKIP LOCKED claim, the close+outbox transaction, publisher confirms
+and ON CONFLICT DO NOTHING all preserved; which checks were actually run (look for the
+commands and their output, not claims). List blocking issues first, then suggestions.</pre>
+      </div>
+
+      <div class="checkpoint" data-ck="p3:issues">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 4</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="wt"> <span>I created a worktree on its own branch</span></label></li>
+          <li><label><input type="checkbox" data-id="adr"> <span>The question issue produced an ADR and a PR, no code changes</span></label></li>
+          <li><label><input type="checkbox" data-id="evidence"> <span>The PR description contains the exact commands and output that ran</span></label></li>
+          <li><label><input type="checkbox" data-id="shared"> <span>I know worktrees share databases, ports and queues</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/codex-goals/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Codex Goals</span><span class="w-time">03:44:46 · 15 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/reviewing-the-pull-request/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Reviewing the Pull Request</span><span class="w-time">04:12:23 · 9 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ STATION: PART 7 ============ -->
+    <section class="sec station" id="part-7" style="--pc:var(--p7)">
+      <header class="st-head">
+        <span class="st-badge">Part 7</span>
+        <h2>Winner checkout with a mock Stripe</h2>
+        <p class="st-goal"><b>Goal</b> Chen, and only Chen, pays exactly $107, and the purchase is marked paid only when a signed message from the payment provider says so.</p>
+        <p class="st-meta"><span>Folder <code>part-7-winner-checkout</code></span><span>Web :5107 · API :3107 · Mock Stripe :7107</span><span>≈ 13 min of video</span></p>
+      </header>
+
+      <p><strong>Stripe</strong> is a payment provider. In <em>hosted checkout</em>, your server asks Stripe for a checkout <strong>session</strong> (with the amount), sends the buyer to Stripe's own payment page, and later receives a <strong>webhook</strong>: an HTTP request from Stripe to your server saying "this session was paid". The repo includes <code>stripe-service/</code>, a small local service shaped like Stripe, so no real account or card is involved.</p>
+      <p>The one rule that matters: <strong>the browser's word is never proof of payment.</strong> After paying, the buyer's browser is redirected back to your site with something like <code>?checkout=success</code> in the URL. Anyone can type that. Only the webhook, <strong>signed</strong> with a secret shared between the provider and your server, counts.</p>
+
+      <figure class="diagram"><svg viewbox="0 0 760 240" role="img" aria-label="Chen clicks Complete purchase; the API creates a checkout session with the server-set amount; Chen pays on the mock Stripe page; mock Stripe sends a signed webhook; the API marks the purchase paid; Dana's view changes to Paid">
+        <defs><marker id="flowhead" viewbox="0 0 10 10" refx="9" refy="5" markerwidth="7" markerheight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--muted)"></path></marker></defs>
+        <g style="font-family:var(--sans);font-size:15px;font-weight:600;fill:var(--ink)">
+          <rect x="20" y="40" width="200" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="120" y="70" text-anchor="middle">🌐 Chen</text>
+          <rect x="280" y="40" width="200" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="380" y="70" text-anchor="middle">⚡ API</text>
+          <rect x="540" y="40" width="200" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="640" y="70" text-anchor="middle">💳 Mock Stripe</text>
+          <rect x="540" y="160" width="200" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="640" y="190" text-anchor="middle">🌐 Chen pays</text>
+          <rect x="280" y="160" width="200" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="380" y="190" text-anchor="middle">🐘 PostgreSQL</text>
+          <rect x="20" y="160" width="200" height="50" rx="10" style="fill:var(--surface);stroke:var(--line)"></rect>
+          <text x="120" y="182" text-anchor="middle">🌐 Dana</text>
+          <text x="120" y="200" text-anchor="middle" style="font-size:12px;font-weight:400;fill:var(--muted)">Awaiting payment → Paid</text>
+        </g>
+        <g style="fill:none;stroke:var(--muted);stroke-width:1.6" marker-end="url(#flowhead)">
+          <path d="M220 65 H280"></path>
+          <path d="M480 58 H540"></path>
+          <path d="M540 82 H480"></path>
+          <path d="M640 90 V160"></path>
+          <path d="M380 90 V160"></path>
+          <path d="M280 185 H220" style="stroke-dasharray:5 4"></path>
+        </g>
+        <path d="M600 40 V12 H120 V40" style="fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4" marker-end="url(#flowhead)"></path>
+        <text x="360" y="8" text-anchor="middle" style="font-size:12px;fill:var(--muted)">a hint, not proof</text>
+        <g style="font:700 12px var(--mono)">
+          <circle cx="250" cy="82" r="11" style="fill:#F2A93B"></circle><text x="250" y="86" text-anchor="middle" style="fill:#1a1a1a">1</text>
+          <circle cx="510" cy="30" r="11" style="fill:#F2A93B"></circle><text x="510" y="34" text-anchor="middle" style="fill:#1a1a1a">2</text>
+          <circle cx="662" cy="125" r="11" style="fill:#F2A93B"></circle><text x="662" y="129" text-anchor="middle" style="fill:#1a1a1a">3</text>
+          <circle cx="510" cy="104" r="11" style="fill:#F2A93B"></circle><text x="510" y="108" text-anchor="middle" style="fill:#1a1a1a">4</text>
+          <circle cx="396" cy="125" r="11" style="fill:#F2A93B"></circle><text x="396" y="129" text-anchor="middle" style="fill:#1a1a1a">5</text>
+        </g>
+        <text x="250" y="206" text-anchor="middle" style="font-size:12px;fill:var(--muted)">polls</text>
+      </svg>
+        <figcaption>1 POST checkout · 2 create session: purchase ID, $107 · 3 redirect to hosted page · 4 signed webhook <code>checkout.session.completed</code> · 5 mark paid. The redirect back to Chen's browser is dashed: a hint, not proof.</figcaption></figure>
+
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Decisions you agree in the grilling</p>
+        <div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Question</th><th scope="col">Decision</th><th scope="col">Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Question">Who can check out?</td><td data-label="Decision">Only the <strong>authoritative winner</strong>, only after the close exists. Seller, losers, others, open and no-bid auctions are rejected by the server.</td><td data-label="Why it matters">The close (Part 6) is the source of truth for who won.</td></tr>
+            <tr><td data-label="Question">Who sets the amount?</td><td data-label="Decision">The <strong>server</strong>: exactly the winning bid, in USD. The browser never sends an amount, auction or currency.</td><td data-label="Why it matters">A browser can be edited; the server can't.</td></tr>
+            <tr><td data-label="Question">What proves payment?</td><td data-label="Decision">Only a valid, <strong>signed</strong> <code>checkout.session.completed</code> webhook, checked against the raw request body, whose purchase, session, amount and currency all match. Redirects and query strings are hints.</td><td data-label="Why it matters">Nobody can fake "paid" by typing a URL.</td></tr>
+            <tr><td data-label="Question">Duplicate webhooks?</td><td data-label="Decision">Each webhook event ID is recorded once; constraints also make completion idempotent per purchase and session. A valid duplicate gets "OK" and changes nothing.</td><td data-label="Why it matters">Providers retry webhooks; that must be harmless.</td></tr>
+            <tr><td data-label="Question">Repeated clicks?</td><td data-label="Decision">One durable purchase per close (a unique constraint). Clicks reuse the open session. The button disables on click.</td><td data-label="Why it matters">Concurrent clicks converge on one purchase, one session.</td></tr>
+            <tr><td data-label="Question">Declines and cancels?</td><td data-label="Decision">Purchase states are only <code>pending</code> and <code>paid</code>. A decline is an attempt on the provider page; cancel shows a message. Both can be retried.</td><td data-label="Why it matters">A decline is a business outcome, not an error.</td></tr>
+            <tr><td data-label="Question">Mock restarts and forgets the session?</td><td data-label="Decision">Auction House stays the source of truth. If the stored session is gone (404), create a replacement for the same purchase and amount.</td><td data-label="Why it matters">Recovers without a second purchase.</td></tr>
+            <tr><td data-label="Question">What can people see?</td><td data-label="Decision">Winner: payment state and checkout actions. Seller: only "Awaiting payment" or "Paid". Everyone else: nothing. Both views poll until paid.</td><td data-label="Why it matters">Least information to each role.</td></tr>
+            <tr><td data-label="Question">Real Stripe account?</td><td data-label="Decision">Not needed. The mock stays a separate local service. Test cards: <code>4242 4242 4242 4242</code> succeeds, <code>4000 0000 0000 0002</code> is declined.</td><td data-label="Why it matters">Free, offline, safe.</td></tr>
+          </tbody>
+        </table></div>
+        <p class="src">Source: <code>part-7-winner-checkout/GRILL.md</code>.</p>
+      </div>
+
+      <div class="box repo"><span class="tag">The mock's problems, and what was fixed</span><p>Mock fixes agreed in grilling: completed sessions could be paid again (fixed: no second payment); session reuse ignored conflicting amounts (fixed: conflicting reuse rejected); "paid" depended on the merchant answering the webhook (fixed: paid first, then deliver); failed webhooks weren't retried (fixed: the same event is kept and redelivered); sessions vanish on restart (kept: the API recovers); session creation is unauthenticated and return URLs unrestricted (kept, out of scope for a local mock); the page showed only the decline card (fixed: both cards); the signature has no timestamp (kept, see below).</p></div>
+
+      <p><strong>Start Part 7 from Part 6:</strong></p>
+<div class="codebox"><div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div><pre><code>cd ~/code/workshop
+rsync -a --exclude node_modules --exclude test-results part-6-async-close-rabbitmq/ part-7-winner-checkout/
+git add -A &amp;&amp; git commit -m "Part 7: start from a copy of Part 6"</code></pre></div>
+
+      <div class="prompt-box" id="p7-prompt-plan">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: plan</span>
+          <span class="pb-tag">Plan first</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p7-prompt-plan &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> in <code>~/code/workshop</code>. Plan mode. Effort: <b>High</b>.</p>
+<pre class="pb-text">Part 7 of the auction site. Work only in part-7-winner-checkout (a copy of part 6) and,
+where needed, the sibling stripe-service/ folder. First switch part 7 to database
+auction_part_7 and ports API 3107 / web 5107 everywhere; Mock Stripe runs on 7107.
+
+Goal: after an auction closes with a winner, the winning bidder can pay on the hosted
+Mock Stripe checkout page, and the seller can see whether it's paid.
+
+Before designing anything, read stripe-service/ end to end and list its problems as a
+payment provider: anything that could cause double charges, lost confirmations, trust in
+the wrong party, or replayed messages. Don't change it yet.
+
+Then grill me with docs, max 2 rounds of up to 10 questions, each with your
+recommendation. Cover at least: who may start checkout and when, who sets the amount,
+what counts as proof of payment, duplicate and replayed webhooks, repeated clicks,
+declines and cancellations, what the seller and other users may see, and what happens if
+the mock restarts and forgets a session.
+
+Write GRILL.md and CONTEXT.md updates, propose 2 slices, and wait for "approved".</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><ul><li>Making the agent audit the provider first is how you'd treat any third-party dependency, and the repo's own grilling found eight real problems in the mock this way.</li><li>The question list names the classic payment failures (double charge, replay, faked success) so the design has to answer each one.</li></ul></details>
+      </div>
+
+      <div class="prompt-box" id="p7-prompt-build">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: build</span>
+          <span class="pb-tag">Build</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p7-prompt-build &gt; .pb-text">Copy</button>
+        </div>
+<pre class="pb-text">Approved. Build Slice 1 only, then stop.
+
+Slice 1, winner completes a replay-safe hosted checkout:
+- Migration: purchases (one per auction close, amount and currency fixed from the winning
+  bid, status pending|paid, current provider session) and payment_webhook_events (event
+  IDs seen).
+- POST checkout for the active user: in one transaction, lock the auction, confirm the
+  user is the recorded winner (403 otherwise), create the purchase if missing (ON
+  CONFLICT), reuse a live session or create one with server-built title, amount, USD and
+  return URLs.
+- Webhook route: verify the HMAC signature over the raw body with a constant-time
+  comparison; then in one transaction match purchase, session, amount and currency,
+  record the event ID once, and move pending to paid only if the event is new.
+- Apply the agreed minimal fixes to stripe-service and show both test cards on its page.
+- UI: "Complete purchase" in the winner's pop-up and on the closed auction page; disable
+  on click; handle cancel and decline with a retry; show Paid only when the API says so.
+- Tests: concurrent clicks, forged user/amount/redirect, bad signature, mismatched
+  webhook fields, duplicate events, decline, cancel, success.
+
+Run all tests, all three type checks (server, web, stripe-service) and a headed browser
+run as the winner: decline with 4000…0002, cancel and retry, then pay with 4242…4242.
+Show me the purchase row before and after.</pre>
+      </div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <ul class="see-list">
+          <li><code>npm start</code> now also runs Mock Stripe (5 processes);</li>
+          <li>after the auction closes, Chen's pop-up and the auction page both offer <strong>Complete purchase</strong>; Dana's page shows <strong>Awaiting payment</strong>; Asha sees no payment information;</li>
+          <li>on the mock checkout page, <code>4000 0000 0000 0002</code> (any future MM / YY, any 3-digit CVC) is declined and the purchase stays <code>pending</code>;</li>
+          <li>Cancel returns to the auction with a retry; <code>4242 4242 4242 4242</code> succeeds and returns to the auction showing <strong>Paid</strong> once the API says so;</li>
+          <li>Dana's view changes from <em>Awaiting payment</em> to <em>Paid</em> without a reload (it polls);</li>
+          <li>the <code>purchases</code> row changes from <code>pending</code> to <code>paid</code>, and <code>payment_webhook_events</code> holds exactly one event.</li>
+        </ul>
+
+        <figure class="wire"><svg viewbox="0 0 700 320" role="img" aria-label="Mock checkout page: Used GPU, $107.00, card field with a red 'Your card was declined' message, and a note listing the two test cards">
+          <rect class="bx" x="60" y="14" width="580" height="292" rx="12"></rect>
+          <text x="90" y="52" style="font-weight:700;font-size:16px">Mock Stripe · Checkout</text>
+          <text x="90" y="80">Used GPU · <tspan class="price">$107.00</tspan></text>
+          <text class="mut" x="90" y="108" style="font-size:12px">Card number</text>
+          <rect x="90" y="116" width="520" height="34" rx="6" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="104" y="138">4000 0000 0000 0002</text>
+          <text class="mut" x="90" y="170" style="font-size:12px">MM / YY</text>
+          <rect x="90" y="178" width="250" height="34" rx="6" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text class="mut" x="104" y="200">MM / YY</text>
+          <text class="mut" x="360" y="170" style="font-size:12px">CVC</text>
+          <rect x="360" y="178" width="250" height="34" rx="6" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text class="mut" x="374" y="200">CVC</text>
+          <text class="err" x="90" y="236">Your card was declined. Use a different card and try again.</text>
+          <rect x="90" y="250" width="200" height="36" rx="8" style="fill:var(--accent);stroke:none"></rect>
+          <text x="118" y="273" style="fill:#fff;font-weight:700">Pay $107.00</text>
+          <text x="320" y="273" style="fill:var(--accent)">Cancel</text>
+          <text class="mut" x="90" y="302" style="font-size:12px">Test cards: 4242 4242 4242 4242 succeeds · 4000 0000 0000 0002 is declined</text>
+        </svg>
+          </figure>
+
+        <div class="term" role="img" aria-label="Terminal output: the purchases row is pending with amount 10700 and paid false, then paid with amount 10700 and paid true after paying with the 4242 test card">
+          <div class="term-bar"><i></i><i></i><i></i><span>Terminal · purchase row</span></div>
+          <pre><span class="ps">$</span> docker compose -f ../docker-compose.yml exec -T postgres psql -U auction -d auction_part_7 \
+    -c "select status, amount_cents, paid_at is not null as paid from purchases;"
+ status  | amount_cents | paid
+---------+--------------+------
+ pending |        10700 | f
+<span class="dim">…after paying with 4242…</span>
+ paid    |        10700 | t</pre>
+        </div>
+      </div>
+
+      <!-- view code: block 5 -->
+      <details class="solution-reveal code-reveal"><summary>View code: winner only <span class="cr-path">app.ts · 315–329</span></summary><div class="sol">
+        <p class="cr-file"><code>part-7-winner-checkout/server/src/app.ts</code> · lines 315–329 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-7-winner-checkout/server/src/app.ts#L315-L329" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">app.ts · lines 315–329</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="315">        `SELECT auction.id::text AS auction_id, auction.title,</span>
+<span class="l" data-n="316">           winning_bid.bidder_user_id AS winning_bidder_user_id,</span>
+<span class="l" data-n="317">           winning_bid.amount_cents</span>
+<span class="l" data-n="318">         FROM auctions auction</span>
+<span class="l" data-n="319">         JOIN auction_closes close ON close.auction_id = auction.id</span>
+<span class="l" data-n="320">         JOIN bids winning_bid ON winning_bid.id = close.winning_bid_id</span>
+<span class="l" data-n="321">         WHERE auction.slug = $1</span>
+<span class="l" data-n="322">         FOR UPDATE OF auction`,</span>
+<span class="l" data-n="323">        [params.data.slug],</span>
+<span class="l" data-n="324">      );</span>
+<span class="l" data-n="325">      const auction = eligible.rows[0];</span>
+<span class="l hl" data-n="326">      if (!auction || auction.winning_bidder_user_id !== body.data.userId) {</span>
+<span class="l" data-n="327">        await client.query('ROLLBACK');</span>
+<span class="l" data-n="328">        return reply.code(403).send({ error: 'Checkout is available only to the winning bidder' });</span>
+<span class="l" data-n="329">      }</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>315–322</code> One query finds the auction, its close and the winning bid, and locks the auction row. If there's no close yet, or no winner, there's no row.</li>
+          <li><code>326</code> The active user must be the winning bidder. Anyone else, including Dana, gets <strong>403</strong>. The amount comes from <code>winning_bid.amount_cents</code>, never from the request.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: check the signature first <span class="cr-path">app.ts · 395–405</span></summary><div class="sol">
+        <p class="cr-file"><code>part-7-winner-checkout/server/src/app.ts</code> · lines 395–405 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-7-winner-checkout/server/src/app.ts#L395-L405" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">app.ts · lines 395–405</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="395">  app.register(async (webhookApp) =&gt; {</span>
+<span class="l" data-n="396">    webhookApp.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_request, body, done) =&gt; {</span>
+<span class="l" data-n="397">      done(null, body);</span>
+<span class="l" data-n="398">    });</span>
+<span class="l" data-n="399">    webhookApp.post('/api/webhooks/stripe', async (request, reply) =&gt; {</span>
+<span class="l" data-n="400">      const rawBody = request.body;</span>
+<span class="l hl" data-n="401">      const signature = request.headers['x-stripe-signature'];</span>
+<span class="l hl" data-n="402">      if (!Buffer.isBuffer(rawBody) || typeof signature !== 'string'</span>
+<span class="l hl" data-n="403">        || !verifyStripeSignature(rawBody, signature, stripeWebhookSecret)) {</span>
+<span class="l hl" data-n="404">        return reply.code(400).send({ error: 'Invalid webhook signature' });</span>
+<span class="l hl" data-n="405">      }</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>396–398</code> For this route only, the JSON body is kept as raw bytes. A signature is computed over exact bytes; re-serialising parsed JSON can change spacing or key order and break it.</li>
+          <li><code>401–405</code> No valid signature, no further processing: 400 before any database work.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: the paid transition, safe to replay <span class="cr-path">app.ts · 432–449</span></summary><div class="sol">
+        <p class="cr-file"><code>part-7-winner-checkout/server/src/app.ts</code> · lines 432–449 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-7-winner-checkout/server/src/app.ts#L432-L449" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">app.ts · lines 432–449</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="432">        if (!purchase || purchase.provider_session_id !== checkout.id</span>
+<span class="l" data-n="433">          || purchase.amount_cents !== checkout.amount_total || purchase.currency !== checkout.currency) {</span>
+<span class="l" data-n="434">          await client.query('ROLLBACK');</span>
+<span class="l" data-n="435">          return reply.code(400).send({ error: 'Webhook does not match the purchase' });</span>
+<span class="l" data-n="436">        }</span>
+<span class="l hl" data-n="437">        const inserted = await client.query(</span>
+<span class="l hl" data-n="438">          `INSERT INTO payment_webhook_events (id, purchase_id, provider_session_id, received_at)</span>
+<span class="l hl" data-n="439">           VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING RETURNING id`,</span>
+<span class="l hl" data-n="440">          [event.eventId, purchase.id, checkout.id, clock.now()],</span>
+<span class="l hl" data-n="441">        );</span>
+<span class="l hl" data-n="442">        if (inserted.rowCount &amp;&amp; purchase.status === 'pending') {</span>
+<span class="l hl" data-n="443">          await client.query(</span>
+<span class="l hl" data-n="444">            `UPDATE purchases SET status = 'paid', paid_at = $2 WHERE id = $1 AND status = 'pending'`,</span>
+<span class="l hl" data-n="445">            [purchase.id, event.occurredAt],</span>
+<span class="l hl" data-n="446">          );</span>
+<span class="l hl" data-n="447">        }</span>
+<span class="l" data-n="448">        await client.query('COMMIT');</span>
+<span class="l" data-n="449">        return { received: true, duplicate: inserted.rowCount === 0 || purchase.status === 'paid' };</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>432–436</code> The webhook must match the stored purchase exactly: same session, same amount, same currency. A valid signature on the wrong data is still rejected.</li>
+          <li><code>437–441</code> Record the provider's event ID. <code>ON CONFLICT (id) DO NOTHING … RETURNING id</code> returns a row only the first time.</li>
+          <li><code>442–447</code> Only a <strong>new</strong> event on a <strong>pending</strong> purchase changes it to paid, and the <code>UPDATE</code> repeats the <code>status = 'pending'</code> condition as a second guard.</li>
+          <li><code>449</code> A duplicate still gets <code>received: true</code>, so the provider stops retrying.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: constant-time comparison <span class="cr-path">payments.ts · 90–99</span></summary><div class="sol">
+        <p class="cr-file"><code>part-7-winner-checkout/server/src/payments.ts</code> · lines 90–99 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-7-winner-checkout/server/src/payments.ts#L90-L99" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">payments.ts · lines 90–99</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="90">export function verifyStripeSignature(body: Buffer, signature: string, secret: string): boolean {</span>
+<span class="l" data-n="91">  const expected = createHmac('sha256', secret).update(body).digest();</span>
+<span class="l" data-n="92">  let supplied: Buffer;</span>
+<span class="l" data-n="93">  try {</span>
+<span class="l" data-n="94">    supplied = Buffer.from(signature, 'hex');</span>
+<span class="l" data-n="95">  } catch {</span>
+<span class="l" data-n="96">    return false;</span>
+<span class="l" data-n="97">  }</span>
+<span class="l hl" data-n="98">  return supplied.length === expected.length &amp;&amp; timingSafeEqual(supplied, expected);</span>
+<span class="l" data-n="99">}</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>91</code> Recompute the HMAC (a keyed hash: only someone with the secret can produce it) over the raw body.</li>
+          <li><code>98</code> Compare with <code>timingSafeEqual</code>, which takes the same time whatever the input. An ordinary <code>===</code> stops at the first wrong character, and an attacker timing many requests could learn the signature byte by byte. The length check first is needed because <code>timingSafeEqual</code> throws on different lengths.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: how the mock signs <span class="cr-path">stripe-service/src/app.ts · 186–198</span></summary><div class="sol">
+        <p class="cr-file"><code>stripe-service/src/app.ts</code> · lines 186–198 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/stripe-service/src/app.ts#L186-L198" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">stripe-service/src/app.ts · lines 186–198</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="186">    if (parsed.data.cardNumber === '4242424242424242') {</span>
+<span class="l" data-n="187">      const event = {</span>
+<span class="l" data-n="188">        eventId: randomUUID(),</span>
+<span class="l" data-n="189">        eventType: 'checkout.session.completed',</span>
+<span class="l" data-n="190">        occurredAt: new Date().toISOString(),</span>
+<span class="l" data-n="191">        data: { object: { id: session.id, object: session.object, status: 'complete', payment_status: 'paid', client_reference_id: session.client_reference_id, amount_total: session.amount_cents, currency: 'usd' } },</span>
+<span class="l" data-n="192">      };</span>
+<span class="l" data-n="193">      const body = JSON.stringify(event);</span>
+<span class="l hl" data-n="194">      const signature = createHmac('sha256', webhookSecret).update(body).digest('hex');</span>
+<span class="l hl" data-n="195">      session.status = 'complete';</span>
+<span class="l hl" data-n="196">      session.payment_status = 'paid';</span>
+<span class="l hl" data-n="197">      session.completion = { body, signature, delivered: false };</span>
+<span class="l" data-n="198">      const delivered = await deliverCompletion(session);</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>186</code> The success test card.</li>
+          <li><code>187–192</code> A Stripe-shaped event with a fresh <code>eventId</code>.</li>
+          <li><code>194</code> The signature: HMAC-SHA256 of the exact JSON string.</li>
+          <li><code>195–197</code> The session is marked paid <strong>before</strong> the webhook is delivered, and the signed body is kept, so a failed delivery is retried with the <em>same</em> event (same ID), which the API deduplicates.</li>
+        </ol>
+        <p>(This file is the shared, final version of the mock: it already includes Part 8's tracing wrapper.)</p>
+      </div></details>
+
+      <div class="box note"><span class="tag">Why real Stripe adds a timestamp</span><p>The mock signs only the body. If someone captured one real webhook, they could send it again later, and the signature would still be valid. Here that replay is harmless, because the event ID is recorded and the purchase is already paid. Real Stripe goes further: its <code>Stripe-Signature</code> header includes a timestamp, the signature covers the timestamp plus the body, and its libraries reject events older than a few minutes. That limits replays even before your own deduplication runs.</p></div>
+
+      <div class="box stretch"><span class="tag">Stretch exercise: timestamped signatures</span>
+<pre>Change stripe-service and part 7 so the webhook signature header carries a timestamp:
+the signed string is "<span class="ph">&lt;timestamp&gt;</span>.<span class="ph">&lt;raw body&gt;</span>", and the API rejects signatures older than
+5 minutes or more than 1 minute in the future, still comparing in constant time. Add
+tests for a fresh signature, an old one, a future one and a tampered body.</pre>
+      </div>
+
+      <div class="box stretch"><span class="tag">Review question</span><p>The checkout route holds a database transaction and a row lock on the auction while it calls Mock Stripe over HTTP (with a 5-second timeout). Ask a review agent: what could that block, and would you restructure it? (Bidding is over, so bids aren't blocked; but think about the close worker, a second click, and a slow provider.)</p></div>
+
+      <div class="checkpoint" data-ck="p3:part-7">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 6</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="audit"> <span>The agent listed the mock's problems before changing it</span></label></li>
+          <li><label><input type="checkbox" data-id="winner"> <span>Only the winner can start checkout (Dana and Asha get 403 or no button)</span></label></li>
+          <li><label><input type="checkbox" data-id="amount"> <span>The amount comes from the server (I tried sending a different one; it was ignored)</span></label></li>
+          <li><label><input type="checkbox" data-id="decline"> <span>The decline card leaves the purchase pending, and retry works</span></label></li>
+          <li><label><input type="checkbox" data-id="paid"> <span>4242 marks it paid only after the webhook; Dana's view updates</span></label></li>
+          <li><label><input type="checkbox" data-id="replay"> <span>I can explain why a duplicate webhook changes nothing</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/stripe-checkout/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Stripe Checkout</span><span class="w-time">03:59:40 · 13 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ STATION: PART 8 ============ -->
+    <section class="sec station" id="part-8" style="--pc:var(--p8)">
+      <header class="st-head">
+        <span class="st-badge">Part 8</span>
+        <h2>Follow one auction across services with Jaeger</h2>
+        <p class="st-goal"><b>Goal</b> Open one trace and see Chen's winning bid, the close, both messages, checkout and payment, across four services, with nothing noisy and nothing private.</p>
+        <p class="st-meta"><span>Folder <code>part-8-cross-stack-debugging</code></span><span>Web :5108 · API :3108 · Mock Stripe :7108 · Jaeger UI :16686 · OTLP :4318</span><span>≈ 19 min of video</span></p>
+      </header>
+
+      <p>By now one auction touches four programs (the API, the close worker, the notification worker and the mock Stripe), plus PostgreSQL, Redis and RabbitMQ. When Chen says "I paid but it still says pending", where do you look? Reading four sets of logs by timestamp is slow and error-prone. This part adds <strong>distributed tracing</strong>.</p>
+
+      <div class="three">
+        <div style="--pc:var(--p8)"><b>📜 Logs</b>What one program said, line by line. Great for detail; hard to join across programs.</div>
+        <div style="--pc:var(--p8)"><b>📈 Metrics</b>Numbers over time: requests per second, error rate. Tell you <em>that</em> something is wrong.</div>
+        <div style="--pc:var(--p8)"><b>🧭 Traces</b>One request's journey across programs, as a tree of timed steps. Tell you <em>where</em>.</div>
+      </div>
+
+      <p><strong>Words:</strong></p>
+      <ul>
+        <li>A <strong>span</strong> is one timed operation (accept a bid, publish a message). Spans nest: a parent and its children.</li>
+        <li>A <strong>trace</strong> is all the spans for one piece of work, sharing a <strong>trace ID</strong>.</li>
+        <li><strong>Context propagation</strong> is how the trace ID travels: in HTTP headers (the W3C <code>traceparent</code> header), in message headers, or, for work that happens much later, saved in a database row.</li>
+        <li><strong>OpenTelemetry</strong> (OTel) is the standard library that records spans. <strong>Jaeger</strong> is a tool that stores them and shows them.</li>
+      </ul>
+
+      <p>The interesting part of this design is the <strong>time gaps</strong>. Chen's bid happens at 5:59:58. The close happens at 6:00:01 in another process. Checkout happens minutes later, when Chen gets round to it. No request lasts that long, so the trace context can't simply ride along in memory. Part 8 <strong>stores</strong> the <code>traceparent</code> on the auction, close and outbox rows, carries it in RabbitMQ headers, and keeps it with the mock Stripe session, so all of it joins one trace without leaving any span open while the system waits.</p>
+
+      <div class="decisions">
+        <p class="blk"><span class="blk-n">2</span>Decisions you agree in the grilling</p>
+        <div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Question</th><th scope="col">Decision</th><th scope="col">Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Question">What can start a trace?</td><td data-label="Decision">Only spans named <code>auction.*</code>, <code>winner.*</code> or <code>mock-stripe.*</code>. Everything else is dropped unless it's inside one of those.</td><td data-label="Why it matters">Jaeger shows business stories, not plumbing.</td></tr>
+            <tr><td data-label="Question">Which database spans stay?</td><td data-label="Decision"><code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code> under a business span. Connection, <code>BEGIN</code>, <code>COMMIT</code>, <code>ROLLBACK</code> spans are removed.</td><td data-label="Why it matters">You see the queries that matter, in context.</td></tr>
+            <tr><td data-label="Question">What is never exported?</td><td data-label="Decision">SQL text, request and response bodies, card data, names, handles, payloads.</td><td data-label="Why it matters">Traces are often shared widely; they must be safe.</td></tr>
+            <tr><td data-label="Question">What <em>is</em> kept?</td><td data-label="Decision">IDs and outcomes: auction, bid, event, user, notification, purchase, session, amount, role, outcome.</td><td data-label="Why it matters">Enough to find and join the story; nothing personal.</td></tr>
+            <tr><td data-label="Question">How does context cross gaps?</td><td data-label="Decision">The winning bid's <code>traceparent</code> is stored on the auction, then the close and outbox rows; RabbitMQ carries it in headers; Mock Stripe keeps it with the session.</td><td data-label="Why it matters">One trace from bid to payment, with no long-open spans.</td></tr>
+            <tr><td data-label="Question">Rejected bid, declined card?</td><td data-label="Decision">Outcomes as attributes (<code>auction.bid.reject</code>, <code>mock_stripe.payment.outcome=declined</code>), not errors.</td><td data-label="Why it matters">Error rate stays meaningful.</td></tr>
+            <tr><td data-label="Question">Who reads traces?</td><td data-label="Decision">People, and agents with <strong>read-only</strong> access.</td><td data-label="Why it matters">Debugging shouldn't be able to change anything.</td></tr>
+          </tbody>
+        </table></div>
+        <p class="src">Part 8 has no <code>GRILL.md</code>; these come from its <code>README.md</code> signal policy and <code>AGENTS.md</code>.</p>
+      </div>
+
+      <p><strong>Start Part 8 from Part 7:</strong></p>
+<div class="codebox"><div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div><pre><code>cd ~/code/workshop
+rsync -a --exclude node_modules --exclude test-results part-7-winner-checkout/ part-8-cross-stack-debugging/
+git add -A &amp;&amp; git commit -m "Part 8: start from a copy of Part 7"</code></pre></div>
+
+      <div class="prompt-box" id="p8-prompt-plan">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: plan and build</span>
+          <span class="pb-tag">Plan first</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p8-prompt-plan &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where"><b>New chat</b> in <code>~/code/workshop</code>. Plan mode. Effort: <b>High</b>.</p>
+<pre class="pb-text">Part 8 of the auction site. Work only in part-8-cross-stack-debugging (a copy of part 7)
+and the sibling stripe-service/. First switch part 8 to database auction_part_8, API 3108,
+web 5108 and Mock Stripe 7108 everywhere. Start Jaeger from the root docker-compose.yml
+(UI on 16686, OTLP/HTTP on 4318) as part of npm start, and give each process its own
+service name: auction-api, auction-close-worker, notification-worker, mock-stripe.
+
+Goal: one high-signal trace that follows the winning path: accepted bid, auction close,
+event publish, event consume, checkout start, provider session, payment attempt, and the
+paid webhook. Business operations only; as little noise as possible.
+
+Rules:
+- Only named business operations may start a trace. No traces for health checks,
+  catalogue reads, worker polling, Redis, DNS, connection or BEGIN/COMMIT spans.
+- Keep useful PostgreSQL query spans under business spans, but never export SQL text,
+  request or response bodies, card data, names or handles.
+- Carry trace context across process and time gaps: save it with the auction, close and
+  outbox rows, put it in RabbitMQ message headers, and keep it with the provider session.
+  Never keep a span open while waiting for the deadline or for the user.
+- A rejected bid or a declined card is a business outcome: record it as an attribute,
+  not as a span error.
+
+Grill me shorter: one round of questions only, each with your recommendation. Then write
+the signal policy into README.md and AGENTS.md, build it, run all tests and type checks,
+generate the golden trace yourself through the browser, and give me the Jaeger steps to
+find it.</pre>
+        <details class="pb-why"><summary>Why this prompt works</summary><ul>
+          <li>It defines "good tracing" as rules you can check in the Jaeger UI (what may start a trace, what must never be exported).</li>
+          <li>It names the hard part, context across time gaps, so the agent doesn't settle for three disconnected traces.</li>
+          <li>It makes "a decline is not an error" explicit, which is the instructor's point: errors should mean <em>our system</em> failed.</li>
+        </ul></details>
+      </div>
+
+      <!-- simulator 4 -->
+      <div class="sim" id="sim-trace" data-sim="trace" aria-labelledby="sim-trace-h"><span class="tag">Simulator · Trace explorer (mock-up, not live Jaeger)</span><h4 id="sim-trace-h">The trace explorer</h4><p class="sim-intro">A mock-up of the Jaeger trace for Chen's GPU. Click a span to see its tags and why it exists, or take the guided tour.</p></div>
+
+      <p><strong>Commands:</strong></p>
+<div class="codebox"><div class="codebar"><span class="fname">commands</span><button class="copy" type="button">Copy</button></div><pre><code>cd ~/code/workshop/part-8-cross-stack-debugging     # stop any Part 6 or 7 first
+npm install
+npm start</code></pre></div>
+
+      <div class="see">
+        <p class="blk"><span class="blk-n">4</span>What you should see</p>
+        <p>Follow these steps, from the Part 8 README, in our story:</p>
+        <ol class="see-list">
+          <li>Open http://localhost:5108 as Chen (not the seller) and place an accepted bid on an auction closing soon.</li>
+          <li>Let it close; Chen's pop-up appears.</li>
+          <li>Complete checkout with <code>4242 4242 4242 4242</code>, any future MM / YY and any 3-digit CVC. (Try the decline card first to see a declined attempt in the trace.)</li>
+          <li>Open Jaeger at http://localhost:16686, choose service <strong>auction-api</strong>, operation <strong>auction.bid.accept</strong>, and click <strong>Find Traces</strong>. Open the newest trace.
+            <ul>
+              <li>The trace spans four services: <code>auction-api</code>, <code>auction-close-worker</code>, <code>notification-worker</code>, <code>mock-stripe</code>.</li>
+              <li>In order: <code>auction.bid.accept</code> → <code>auction.close</code> → <code>auction.closed.publish</code> → <code>auction.closed.consume</code> → <code>winner.checkout.start</code> → <code>mock-stripe.checkout.create</code> → <code>mock-stripe.payment.attempt</code> → <code>winner.purchase.mark-paid</code>.</li>
+              <li>No health checks, no polling spans, no <code>BEGIN</code>/<code>COMMIT</code>, no SQL text in any tag.</li>
+              <li>The declined attempt is there with an outcome tag, <strong>not</strong> marked as an error.</li>
+            </ul>
+          </li>
+        </ol>
+
+        <figure class="wire"><svg viewbox="0 0 700 260" role="img" aria-label="Jaeger search page: service auction-api, operation auction.bid.accept, one result: 10 spans, 4 services">
+          <rect class="bx" x="14" y="14" width="232" height="232" rx="10"></rect>
+          <text x="30" y="44" style="font-weight:700">Search</text>
+          <text class="mut" x="30" y="76" style="font-size:12px">Service</text>
+          <rect x="30" y="84" width="200" height="30" rx="6" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="42" y="104">auction-api</text>
+          <text class="mut" x="30" y="136" style="font-size:12px">Operation</text>
+          <rect x="30" y="144" width="200" height="30" rx="6" style="fill:var(--surface-2);stroke:var(--line)"></rect>
+          <text x="42" y="164">auction.bid.accept</text>
+          <rect x="30" y="196" width="200" height="34" rx="8" style="fill:var(--accent);stroke:none"></rect>
+          <text x="92" y="218" style="fill:#fff;font-weight:700">Find Traces</text>
+          <rect class="bx" x="258" y="14" width="428" height="110" rx="10"></rect>
+          <text x="274" y="44" style="font-weight:700">auction-api: auction.bid.accept</text>
+          <text x="274" y="68" style="font-size:12.5px">10 Spans · 2m 50s</text>
+          <text class="mut" x="274" y="92" style="font-size:12px">auction-api (4) · auction-close-worker (2) · notification-worker (1) · mock-stripe (3)</text>
+        </svg>
+          <figcaption>Span counts and timings are illustrative; yours will include a few more database spans.</figcaption></figure>
+      </div>
+
+      <!-- view code: block 5 -->
+      <details class="solution-reveal code-reveal"><summary>View code: the context helpers <span class="cr-path">tracing.ts · 15–32</span></summary><div class="sol">
+        <p class="cr-file"><code>part-8-cross-stack-debugging/server/src/tracing.ts</code> · lines 15–32 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-8-cross-stack-debugging/server/src/tracing.ts#L15-L32" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">tracing.ts · lines 15–32</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="15">export function contextFromTraceparent(traceparent?: string | null): Context {</span>
+<span class="l hl" data-n="16">  return traceparent ? propagation.extract(ROOT_CONTEXT, { traceparent }) : ROOT_CONTEXT;</span>
+<span class="l" data-n="17">}</span>
+<span class="l" data-n="18"></span>
+<span class="l" data-n="19">export function contextFromHeaders(headers: Record&lt;string, unknown&gt;): Context {</span>
+<span class="l" data-n="20">  const traceparent = headers.traceparent;</span>
+<span class="l" data-n="21">  const tracestate = headers.tracestate;</span>
+<span class="l hl" data-n="22">  return propagation.extract(ROOT_CONTEXT, {</span>
+<span class="l" data-n="23">    ...(typeof traceparent === 'string' ? { traceparent } : {}),</span>
+<span class="l" data-n="24">    ...(typeof tracestate === 'string' ? { tracestate } : {}),</span>
+<span class="l" data-n="25">  });</span>
+<span class="l" data-n="26">}</span>
+<span class="l" data-n="27"></span>
+<span class="l" data-n="28">export function traceHeaders(source: Context = context.active()): Record&lt;string, string&gt; {</span>
+<span class="l" data-n="29">  const carrier: Record&lt;string, string&gt; = {};</span>
+<span class="l hl" data-n="30">  propagation.inject(source, carrier);</span>
+<span class="l" data-n="31">  return carrier;</span>
+<span class="l" data-n="32">}</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>15–17</code> Rebuild a context from a saved <code>traceparent</code> string (from a database row).</li>
+          <li><code>19–26</code> The same from message headers (RabbitMQ).</li>
+          <li><code>28–32</code> The reverse: write the current context into a plain object of headers, ready to attach to a message or save. Everything else in Part 8 uses these three helpers.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: business-only sampling <span class="cr-path">otel.ts · 14–32</span></summary><div class="sol">
+        <p class="cr-file"><code>part-8-cross-stack-debugging/server/src/otel.ts</code> · lines 14–32 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-8-cross-stack-debugging/server/src/otel.ts#L14-L32" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">otel.ts · lines 14–32</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l hl" data-n="14">const businessPrefixes = ['auction.', 'winner.', 'mock-stripe.'];</span>
+<span class="l" data-n="15"></span>
+<span class="l" data-n="16">class BusinessRootSampler implements Sampler {</span>
+<span class="l" data-n="17">  shouldSample(</span>
+<span class="l" data-n="18">    _parentContext: Parameters&lt;Sampler['shouldSample']&gt;[0],</span>
+<span class="l" data-n="19">    _traceId: string,</span>
+<span class="l" data-n="20">    spanName: string,</span>
+<span class="l" data-n="21">  ): SamplingResult {</span>
+<span class="l" data-n="22">    return {</span>
+<span class="l hl" data-n="23">      decision: businessPrefixes.some((prefix) =&gt; spanName.startsWith(prefix))</span>
+<span class="l hl" data-n="24">        ? SamplingDecision.RECORD_AND_SAMPLED</span>
+<span class="l hl" data-n="25">        : SamplingDecision.NOT_RECORD,</span>
+<span class="l" data-n="26">    };</span>
+<span class="l" data-n="27">  }</span>
+<span class="l" data-n="28"></span>
+<span class="l" data-n="29">  toString(): string {</span>
+<span class="l" data-n="30">    return 'BusinessRootSampler';</span>
+<span class="l" data-n="31">  }</span>
+<span class="l" data-n="32">}</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>14</code> The three allowed name prefixes.</li>
+          <li><code>16–27</code> A <em>sampler</em> decides, when a trace would start, whether to record it. This one records only if the root span's name starts with a business prefix. It's wrapped in a <code>ParentBasedSampler</code> (line 79 of the same file), so child spans, such as the <code>pg</code> query spans, follow their parent's decision: kept under a business span, dropped otherwise.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: the producer span and header injection <span class="cr-path">outboxPublisher.ts · 66–89</span></summary><div class="sol">
+        <p class="cr-file"><code>part-8-cross-stack-debugging/server/src/outboxPublisher.ts</code> · lines 66–89 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-8-cross-stack-debugging/server/src/outboxPublisher.ts#L66-L89" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">outboxPublisher.ts · lines 66–89</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="66">    for (const row of pending.rows) {</span>
+<span class="l" data-n="67">      const event = auctionClosedEventSchema.parse(row.payload);</span>
+<span class="l hl" data-n="68">      const started = startBusinessSpan('auction.closed.publish', {</span>
+<span class="l" data-n="69">        'auction.id': event.auctionId,</span>
+<span class="l" data-n="70">        'auction.slug': event.slug,</span>
+<span class="l" data-n="71">        'messaging.destination.name': auctionEventsExchange,</span>
+<span class="l" data-n="72">        'messaging.message.id': row.id,</span>
+<span class="l" data-n="73">        'messaging.operation.name': 'publish',</span>
+<span class="l hl" data-n="74">      }, contextFromTraceparent(row.traceparent), SpanKind.PRODUCER);</span>
+<span class="l" data-n="75">      publishSpans.push(started);</span>
+<span class="l" data-n="76">      channel.publish(</span>
+<span class="l" data-n="77">        auctionEventsExchange,</span>
+<span class="l" data-n="78">        auctionClosedRoutingKey,</span>
+<span class="l" data-n="79">        Buffer.from(JSON.stringify(event)),</span>
+<span class="l" data-n="80">        {</span>
+<span class="l" data-n="81">          persistent: true,</span>
+<span class="l" data-n="82">          contentType: 'application/json',</span>
+<span class="l" data-n="83">          messageId: row.id,</span>
+<span class="l" data-n="84">          type: event.eventType,</span>
+<span class="l" data-n="85">          timestamp: Math.floor(now.getTime() / 1_000),</span>
+<span class="l hl" data-n="86">          headers: traceHeaders(started.activeContext),</span>
+<span class="l" data-n="87">        },</span>
+<span class="l" data-n="88">      );</span>
+<span class="l" data-n="89">    }</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>68–74</code> A <code>PRODUCER</code> span, whose parent is the context saved on the outbox row (<code>contextFromTraceparent(row.traceparent)</code>), so publishing joins the bid's trace even though it runs in another process seconds later.</li>
+          <li><code>86</code> <code>traceHeaders(…)</code> puts this span's context into the RabbitMQ message headers. On the other side, the notification worker calls <code>contextFromHeaders</code> and starts a <code>CONSUMER</code> span: this is the line where work visibly crosses into another service.</li>
+        </ol>
+      </div></details>
+
+      <details class="solution-reveal code-reveal"><summary>View code: the close span picks up the bid's trace <span class="cr-path">auctionClose.ts · 89–140, 153</span></summary><div class="sol">
+        <p class="cr-file"><code>part-8-cross-stack-debugging/server/src/auctionClose.ts</code> · lines 89–93 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-8-cross-stack-debugging/server/src/auctionClose.ts#L89-L93" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">auctionClose.ts · lines 89–93</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="89">    for (const auction of due.rows) {</span>
+<span class="l hl" data-n="90">      await withBusinessSpan('auction.close', {</span>
+<span class="l" data-n="91">        'auction.id': auction.id,</span>
+<span class="l" data-n="92">        'auction.slug': auction.slug,</span>
+<span class="l" data-n="93">      }, async (span) =&gt; {</span>
+</code></pre>
+        </div>
+        <p class="cr-file"><code>part-8-cross-stack-debugging/server/src/auctionClose.ts</code> · lines 128–140 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-8-cross-stack-debugging/server/src/auctionClose.ts#L128-L140" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">auctionClose.ts · lines 128–140</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l hl" data-n="128">        const traceparent = activeTraceparent();</span>
+<span class="l" data-n="129"></span>
+<span class="l" data-n="130">        await client.query(</span>
+<span class="l" data-n="131">          `INSERT INTO auction_closes (auction_id, closed_at, winning_bid_id, traceparent)</span>
+<span class="l" data-n="132">           VALUES ($1, $2, $3, $4)`,</span>
+<span class="l" data-n="133">          [auction.id, now, winner?.id ?? null, traceparent],</span>
+<span class="l" data-n="134">        );</span>
+<span class="l" data-n="135">        await client.query(</span>
+<span class="l" data-n="136">          `INSERT INTO outbox_events (</span>
+<span class="l" data-n="137">             id, event_type, auction_id, payload, occurred_at, traceparent</span>
+<span class="l" data-n="138">           ) VALUES ($1, 'AuctionClosed', $2, $3::jsonb, $4, $5)`,</span>
+<span class="l" data-n="139">          [eventId, auction.id, JSON.stringify(event), now, traceparent],</span>
+<span class="l" data-n="140">        );</span>
+</code></pre>
+        </div>
+        <p class="cr-file"><code>part-8-cross-stack-debugging/server/src/auctionClose.ts</code> · lines 153–153 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-8-cross-stack-debugging/server/src/auctionClose.ts#L153-L153" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">auctionClose.ts · lines 153–153</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l hl" data-n="153">      }, contextFromTraceparent(auction.traceparent));</span>
+</code></pre>
+        </div>
+        <ol class="cr-explain">
+          <li><code>90–93</code> An <code>auction.close</code> span per auction.</li>
+          <li><code>153</code> Its parent is the <code>traceparent</code> stored on the auction row, which the bid handler updates on every accepted bid, so it's the last (winning) bid's trace.</li>
+          <li><code>128–140</code> Inside the span, its own context is saved on both the close row and the outbox row, so the publisher, and later checkout, can continue from here.</li>
+        </ol>
+      </div></details>
+
+      <div class="prompt-box" id="p8-prompt-debug">
+        <div class="pb-head">
+          <span class="blk-n">3</span><span class="pb-title">Prompt box: debug with traces, read-only</span>
+          <span class="pb-tag">Review only</span>
+          <span class="sp"></span>
+          <button type="button" class="copy" data-copy="#p8-prompt-debug &gt; .pb-text">Copy</button>
+        </div>
+        <p class="pb-where">Any chat, Part 8 running. The agent only reads.</p>
+<pre class="pb-text">Chen says checkout felt slow. Investigate using traces only; read-only, change nothing.
+Query Jaeger's HTTP API with curl, for example:
+  curl -s "http://localhost:16686/api/traces?service=auction-api&amp;operation=winner.checkout.start&amp;limit=5"
+For the most recent trace, list each span with service, duration and its outcome
+attributes, find the slowest step, and say whether the time is our code, the database,
+or the provider. Don't open the database or edit any files.</pre>
+      </div>
+
+      <div class="box cost"><span class="tag">Read-only for agents</span><ul><li>Give agents read access to telemetry, never write access. Traces here contain no names or card data by design, but in a real system check that before you point any tool, human or AI, at them.</li></ul></div>
+
+      <div class="box stretch"><span class="tag">Stretch exercise: the redactor's hard-coded name</span>
+        <p>The exporter that drops noisy spans matches them by exact name, including the database name:</p>
+        <p class="cr-file"><code>part-8-cross-stack-debugging/server/src/otel.ts</code> · lines 49–55 · <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/blob/master/part-8-cross-stack-debugging/server/src/otel.ts#L49-L55" target="_blank" rel="noopener">Open on GitHub ↗</a></p>
+        <div class="codebox">
+          <div class="codebar"><span class="fname">otel.ts · lines 49–55</span><button class="copy" type="button">Copy</button></div>
+<pre class="ln"><code><span class="l" data-n="49">    const meaningful = spans.filter((span) =&gt; ![</span>
+<span class="l" data-n="50">      'pg.connect',</span>
+<span class="l" data-n="51">      'pg-pool.connect',</span>
+<span class="l" data-n="52">      'pg.query:BEGIN auction_part_8',</span>
+<span class="l" data-n="53">      'pg.query:COMMIT auction_part_8',</span>
+<span class="l" data-n="54">      'pg.query:ROLLBACK auction_part_8',</span>
+<span class="l" data-n="55">    ].includes(span.name));</span>
+</code></pre>
+        </div>
+        <p>Lines 52–54 only match <code>auction_part_8</code>. Copy this part to another database name and the <code>BEGIN</code>/<code>COMMIT</code> spans come back. Ask the agent to match on the statement kind instead of the full name (for example, a name that starts with <code>pg.query:BEGIN </code>), and to add a test that runs with a different database name.</p>
+      </div>
+
+      <div class="checkpoint" data-ck="p3:part-8">
+        <p class="blk"><span class="blk-n">6</span>Checkpoint <span class="ck-count" aria-live="polite">0 / 6</span></p>
+        <ul>
+          <li><label><input type="checkbox" data-id="jaeger"> <span>Jaeger runs at http://localhost:16686 and shows the four services</span></label></li>
+          <li><label><input type="checkbox" data-id="golden"> <span>I found one trace from <code>auction.bid.accept</code> to <code>winner.purchase.mark-paid</code></span></label></li>
+          <li><label><input type="checkbox" data-id="quiet"> <span>No health, polling, BEGIN/COMMIT or SQL text in it</span></label></li>
+          <li><label><input type="checkbox" data-id="decline"> <span>The declined attempt is an outcome, not an error</span></label></li>
+          <li><label><input type="checkbox" data-id="gaps"> <span>I can explain how the trace survives the wait for 6:00 pm and for Chen</span></label></li>
+          <li><label><input type="checkbox" data-id="tour"> <span>I took the guided tour in the trace explorer</span></label></li>
+        </ul>
+        <button type="button" class="link-btn ck-reset">Clear this list</button>
+      </div>
+
+      <div class="watch">
+        <p class="blk"><span class="blk-n">7</span>Watch</p>
+        <ul>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/observability/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Observability</span><span class="w-time">04:21:25 · 11 min</span></a></li>
+          <li><a href="https://master.dev/courses/fullstack-app-codex/observability-with-jaeger/" target="_blank" rel="noopener"><span class="w-play" aria-hidden="true">▶</span><span class="w-t">Observability with Jaeger</span><span class="w-time">04:32:06 · 8 min</span></a></li>
+        </ul>
+        <p class="muted small">Videos are on master.dev and may need a subscription.</p>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ PLAIN SECTION: what to remember ============ -->
+    <section class="sec" id="remember">
+      <p class="eyebrow">The method, in six lines</p>
+      <h2>What to remember</h2>
+      <ol class="walk">
+        <li><strong>Plan.</strong> Let the agent grill you; write the decisions down. <em>"Money in integer cents, the API enforces +$1."</em></li>
+        <li><strong>Slice.</strong> Two to four pieces, each ending in something you can click. Build one, stop, review. <em>"Catalogue, then post, then bid."</em></li>
+        <li><strong>Prove the bug.</strong> Before fixing, make it visible and repeatable. <em>"Four windows, two accepted $102 bids."</em></li>
+        <li><strong>Fix it.</strong> At the right layer, with the smallest change. <em>"Lock the auction row, then read the price."</em></li>
+        <li><strong>Verify.</strong> Tests, type checks and a real browser, run by the agent, with the output shown. <em>"The same bidding war, now demanding no duplicates."</em></li>
+        <li><strong>Review.</strong> A fresh pair of eyes, and evidence for every finding. <em>"A smaller model found FOR SHARE by comparing GRILL.md with the code."</em></li>
+      </ol>
+      <p>The agent wrote almost every line of this app. What made it work was everything around the code: the questions, the slices, the tests that proved things, and the reviews that didn't take "done" for an answer. Those habits carry over to any project and any agent.</p>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ PLAIN SECTION: other agents ============ -->
+    <section class="sec" id="agents">
+      <p class="eyebrow">Same method, any agent</p>
+      <h2>Doing this with Claude Code or Antigravity</h2>
+      <p>The course is recorded with Codex, but nothing in the method depends on it. Here's where each piece lives.</p>
+
+      <div class="agents" role="region" aria-label="How the steps map to each agent">
+        <div class="ag-tabs" role="tablist" aria-label="Your coding agent">
+          <button type="button" role="tab" data-key="codex" id="tab-codex" aria-controls="ag-codex" aria-selected="true">Codex</button>
+          <button type="button" role="tab" data-key="claude" id="tab-claude" aria-controls="ag-claude" aria-selected="false">Claude Code</button>
+          <button type="button" role="tab" data-key="ag" id="tab-ag" aria-controls="ag-ag" aria-selected="false">Antigravity</button>
+        </div>
+        <div class="ag-panel" role="tabpanel" id="ag-codex" aria-labelledby="tab-codex"><h4 class="nojs">Codex</h4><div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Step</th><th scope="col">In Codex</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Step">Project rules</td><td data-label="In Codex"><code>AGENTS.md</code> at the root and in each part folder</td></tr>
+            <tr><td data-label="Step">Plan / grill</td><td data-label="In Codex">Plan mode + the <code>grill-with-docs</code> skill</td></tr>
+            <tr><td data-label="Step">Effort</td><td data-label="In Codex">Reasoning level in model settings (the instructor prefers high or extra high, and no fast mode)</td></tr>
+            <tr><td data-label="Step">Browser checks</td><td data-label="In Codex">Headed Playwright in Edge or Chrome, as the root <code>AGENTS.md</code> asks</td></tr>
+            <tr><td data-label="Step">Long issue work</td><td data-label="In Codex"><code>/goal</code> with success criteria; GitHub CLI for issues and PRs</td></tr>
+            <tr><td data-label="Step">Parallel work</td><td data-label="In Codex">Git worktrees, one task each</td></tr>
+            <tr><td data-label="Step">Review</td><td data-label="In Codex">A fresh chat (or Claude Code) with a review-only prompt</td></tr>
+          </tbody>
+        </table></div></div>
+        <div class="ag-panel" role="tabpanel" id="ag-claude" aria-labelledby="tab-claude"><h4 class="nojs">Claude Code</h4><div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Step</th><th scope="col">In Claude Code</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Step">Project rules</td><td data-label="In Claude Code"><code>CLAUDE.md</code> containing <code>@AGENTS.md</code>, at the root and in the part folder you're in</td></tr>
+            <tr><td data-label="Step">Plan / grill</td><td data-label="In Claude Code">Plan mode (Shift+Tab), plus the grill skill in <code>.claude/skills/</code></td></tr>
+            <tr><td data-label="Step">Effort</td><td data-label="In Claude Code">Pick the model with <code>/model</code>; ask for deeper thinking on Parts 3, 5, 6</td></tr>
+            <tr><td data-label="Step">Browser checks</td><td data-label="In Claude Code">Ask it to write and run headed Playwright; it runs the commands in your terminal</td></tr>
+            <tr><td data-label="Step">Long issue work</td><td data-label="In Claude Code">One prompt with the issue, the success criteria and "open a PR, don't merge"; it can use <code>gh</code></td></tr>
+            <tr><td data-label="Step">Parallel work</td><td data-label="In Claude Code">Git worktrees; run a separate Claude Code session in each</td></tr>
+            <tr><td data-label="Step">Review</td><td data-label="In Claude Code">A new session, review-only prompt; compare with a Codex review</td></tr>
+          </tbody>
+        </table></div></div>
+        <div class="ag-panel" role="tabpanel" id="ag-ag" aria-labelledby="tab-ag"><h4 class="nojs">Antigravity</h4><div class="tw"><table class="tbl">
+          <thead><tr><th scope="col">Step</th><th scope="col">In Antigravity</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Step">Project rules</td><td data-label="In Antigravity">A workspace rule: "Follow AGENTS.md at the repo root and in the part folder you work in"</td></tr>
+            <tr><td data-label="Step">Plan / grill</td><td data-label="In Antigravity">Planning mode; paste the grilling rules as a rule if skills aren't available</td></tr>
+            <tr><td data-label="Step">Effort</td><td data-label="In Antigravity">Choose the strongest reasoning model for the hard parts</td></tr>
+            <tr><td data-label="Step">Browser checks</td><td data-label="In Antigravity">Ask for Playwright with Edge explicitly; the repo's tests need it</td></tr>
+            <tr><td data-label="Step">Long issue work</td><td data-label="In Antigravity">Agent Manager: one agent per issue, each in its own worktree</td></tr>
+            <tr><td data-label="Step">Parallel work</td><td data-label="In Antigravity">Several agents at once, each with its own branch and folder (and not two Part 6 demos at once)</td></tr>
+            <tr><td data-label="Step">Review</td><td data-label="In Antigravity">A second agent, review-only, then compare</td></tr>
+          </tbody>
+        </table></div></div>
+      </div>
+
+      <div class="box note"><span class="tag">If a feature has a different name in your version</span><p>Fall back to plain words. Every agent understands "Don't edit any files yet", "Ask me up to 10 questions, each with your recommendation", "Build only this slice, run these checks, show me the output, then stop" and "Review only; give a failure scenario and line numbers for each finding".</p></div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ QUIZ ============ -->
+    <section class="sec" id="quiz">
+      <p class="eyebrow">Check yourself</p>
+      <h2>Quiz</h2>
+      <div class="quiz" data-quiz="p3">
+        <fieldset class="q" data-answer="d">
+          <legend><span class="q-n">1</span> Part 5 changed <code>FOR UPDATE</code> to <code>FOR SHARE</code>. Why does that bring the race back?</legend>
+          <label><input type="radio" name="p3q1" value="a"> <span><code>FOR SHARE</code> is slower, so requests time out</span></label>
+          <label><input type="radio" name="p3q1" value="b"> <span>It doesn't: the race comes from a deleted test</span></label>
+          <label><input type="radio" name="p3q1" value="c"> <span><code>FOR SHARE</code> doesn't start a transaction</span></label>
+          <label><input type="radio" name="p3q1" value="d"> <span>Shared locks don't block each other, so two bid transactions both hold the lock, both read $101 and both insert $102</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>A shared lock only blocks writers of that row. The bid transactions never write the auction row, so nothing makes them wait for each other.</p>
+        </fieldset>
+
+        <fieldset class="q" data-answer="a">
+          <legend><span class="q-n">2</span> Why does Part 6 write the close and an <code>outbox_events</code> row in the same transaction, instead of publishing to RabbitMQ right after committing?</legend>
+          <label><input type="radio" name="p3q2" value="a"> <span>If the worker crashed between committing and publishing, the event would be lost; with the outbox, the pending row is published after restart</span></label>
+          <label><input type="radio" name="p3q2" value="b"> <span>RabbitMQ can't be called from a transaction</span></label>
+          <label><input type="radio" name="p3q2" value="c"> <span>It's faster</span></label>
+          <label><input type="radio" name="p3q2" value="d"> <span>To avoid needing a notification worker</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>The database and the broker can't commit together. The outbox makes "the close happened" and "the event must be sent" one atomic fact; publishing becomes a retryable step.</p>
+        </fieldset>
+
+        <fieldset class="q" data-answer="b">
+          <legend><span class="q-n">3</span> Why is <code>ON CONFLICT (outbox_event_id, recipient_user_id) DO NOTHING</code> enough to handle redelivered messages?</legend>
+          <label><input type="radio" name="p3q3" value="a"> <span>RabbitMQ never redelivers</span></label>
+          <label><input type="radio" name="p3q3" value="b"> <span>The unique constraint means a second insert for the same event and person is silently skipped; then only deliveries not yet emitted are sent, so a redelivery sends nothing new</span></label>
+          <label><input type="radio" name="p3q3" value="c"> <span>Because the worker deletes messages it has seen</span></label>
+          <label><input type="radio" name="p3q3" value="d"> <span>It isn't; you also need a dead-letter queue</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>The database does the deduplication. Combined with "emit only unsent deliveries" and the browser remembering notification IDs, repeating any step is harmless.</p>
+        </fieldset>
+
+        <fieldset class="q" data-answer="c">
+          <legend><span class="q-n">4</span> After paying, Chen's browser returns to <code>/items/used-gpu?checkout=success</code>. Why doesn't the API mark the purchase paid on that?</legend>
+          <label><input type="radio" name="p3q4" value="a"> <span>The URL is too long</span></label>
+          <label><input type="radio" name="p3q4" value="b"> <span>The redirect arrives before the payment</span></label>
+          <label><input type="radio" name="p3q4" value="c"> <span>Anyone can type that URL; only a webhook signed with the shared secret, matching the purchase, session, amount and currency, proves payment</span></label>
+          <label><input type="radio" name="p3q4" value="d"> <span>Because the seller must approve it</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>Browsers are controlled by users. Redirects are navigation hints; proof comes server-to-server, signed.</p>
+        </fieldset>
+
+        <fieldset class="q" data-answer="d">
+          <legend><span class="q-n">5</span> In the Jaeger trace, which span is where work crosses from the close worker into another service through RabbitMQ?</legend>
+          <label><input type="radio" name="p3q5" value="a"> <span><code>auction.bid.accept</code></span></label>
+          <label><input type="radio" name="p3q5" value="b"> <span><code>winner.checkout.start</code></span></label>
+          <label><input type="radio" name="p3q5" value="c"> <span><code>pg.query:INSERT</code></span></label>
+          <label><input type="radio" name="p3q5" value="d"> <span><code>auction.closed.publish</code> (a producer span that puts the trace context into the message headers)</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>The producer span injects <code>traceparent</code> into the message headers; the notification worker extracts it and starts <code>auction.closed.consume</code>.</p>
+        </fieldset>
+
+        <fieldset class="q" data-answer="a">
+          <legend><span class="q-n">6</span> In Part 8, a declined card is recorded as <code>mock_stripe.payment.outcome=declined</code>, not as an error span. Why?</legend>
+          <label><input type="radio" name="p3q6" value="a"> <span>A decline is a normal business outcome; error status should mean our system failed, so error rates and alerts stay meaningful</span></label>
+          <label><input type="radio" name="p3q6" value="b"> <span>Jaeger can't show errors</span></label>
+          <label><input type="radio" name="p3q6" value="c"> <span>To hide declines from the seller</span></label>
+          <label><input type="radio" name="p3q6" value="d"> <span>Because the mock doesn't support errors</span></label>
+          <p class="q-fb" aria-live="polite" hidden></p>
+          <p class="q-why" hidden>If every rejected bid and declined card were an "error", real failures would drown in noise. Outcomes go in attributes; errors are for faults.</p>
+        </fieldset>
+
+        <p class="quiz-score" aria-live="polite">Answered 0 of 6</p>
+        <button type="button" class="btn ghost quiz-reset">Try again</button>
+      </div>
+    </section>
+    <hr class="sec">
+
+    <!-- ============ THE END ============ -->
+    <section class="sec" id="end">
+      <p class="eyebrow">Done</p>
+      <h2>The end</h2>
+      <p>Chen has his GPU, Dana has her $107, and you have an app that survives a bidding war, a crash, a forged redirect and a slow checkout. More importantly, you have a method that works with any agent.</p>
+      <p><strong>Where to go next</strong></p>
+      <ul>
+        <li>Do the stretch exercises: refetch on reconnect (Page 2), dead letters, timestamped webhooks and the redactor (this page).</li>
+        <li>Compare your <code>workshop/</code> with <code>reference/</code> part by part, starting with each part's <code>GRILL.md</code>. Where did your decisions differ, and why?</li>
+        <li>Use the method on your own project: start with an <code>AGENTS.md</code>, then grill, slice, prove, fix, verify, review.</li>
+      </ul>
+      <div class="linkcards"><a href="../live-auction-build/"><b>← Part 2 of 3 · Build it: Parts 1–4</b></a><a href="../../../../"><b>⌂ AWS AI Capstone · all 19 projects</b></a></div>
+    </section>
+
+<!-- awsq:bottom -->
+<div class="awsq awsq-bottom" role="navigation" aria-label="Capstone navigation (bottom)"><div class="awsq-box"><div class="awsq-head"><span class="awsq-cap">AWS AI Capstone · Project 19 of 23 · Part 3 of 3</span><a class="aih" href="https://balajiraghuram92.github.io/" title="Back to the AI-Infusion home page">⌂ AI-Infusion</a></div><div class="awsq-row"><a class="awsq-l awsq-prev" href="../live-auction-build/"><span class="awsq-d">← Previous</span><span class="awsq-t">Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4</span></a><a class="awsq-home" href="../../../../"><b>AWS AI Capstone</b>All 23 projects</a><a class="awsq-l awsq-next" href="../../../nova-brown-blog-writer/"><span class="awsq-d">Next →</span><span class="awsq-t">Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement</span></a></div><ol class="awsq-steps" aria-label="All projects"><li><a class="done" href="../../../trip-buddy/" title="Project 1 · Trip Buddy">P1</a></li><li><a class="done" href="../../../ai-agents-finance/" title="Project 2 · AI agents in finance">P2</a></li><li><a class="done" href="../../../nps-analyst/" title="Project 3 · NPS analyst in a box">P3</a></li><li><a class="done" href="../../../production-rag/" title="Project 4 · Production RAG from scratch">P4</a></li><li><a class="done" href="../../../agentic-rag/" title="Project 5 · Agentic RAG">P5</a></li><li><a class="done" href="../../../deep-search-agents/" title="Project 6 · Deep search agents">P6</a></li><li><a class="done key" href="../../../vendor-risk-assessor/" title="Project 7 · Capstone · AI vendor risk assessor">P7 ★</a></li><li><a class="done" href="../../../agent-frameworks-fundamental-analysis/" title="Project 8 · Finance Part 2 · Agent frameworks">P8</a></li><li><a class="done" href="../../../deep-search-research-agents/" title="Project 9 · Finance Part 3 · Deep search">P9</a></li><li><a class="done" href="../../../reasoning-paradigms/" title="Project 10 · Finance Part 4 · Reasoning paradigms">P10</a></li><li><a class="done" href="../../../teams-of-agents/" title="Project 11 · Finance Part 5 · Teams of agents">P11</a></li><li><a class="done" href="../../../agentic-rag-finance/" title="Project 12 · Finance Part 6 · Agentic RAG">P12</a></li><li><a class="done" href="../../../prove-it-then-run-it/" title="Project 13 · Finance Part 7 · Evaluation and production">P13</a></li><li><a class="done" href="../../../adaptive-learning-app/" title="Project 14 · Case study · Adaptive learning app">P14</a></li><li><a class="done" href="../../../ship-ai-agent-to-aws/" title="Project 15 · Inventory agent on AWS · Start here">P15</a></li><li><a class="done" href="../../../understand-system-before-deploy/" title="Project 16 · Inventory agent on AWS · 1 Understand the system">P16</a></li><li><a class="done" href="../../../deploy-yourself-one-command-at-time/" title="Project 17 · Inventory agent on AWS · 2 Deploy by hand">P17</a></li><li><a class="done" href="../../../automate-push-code-deployment/" title="Project 18 · Inventory agent on AWS · 3 Automate with GitHub Actions">P18</a></li><li><a class="done" href="../../" title="Project 19 · Part 1 of 3 · Live Auction House · Set up and learn the agent">P19·1</a></li><li><a class="done" href="../live-auction-build/" title="Project 19 · Part 2 of 3 · Live Auction House · Build it: Parts 1–4">P19·2</a></li><li><a class="cur" href="./" title="Project 19 · Part 3 of 3 · Live Auction House · Ship it: Parts 5–8" aria-current="page">P19·3</a></li><li><a class="" href="../../../nova-brown-blog-writer/" title="Project 20 · Part 1 of 3 · Nova + Brown blog writer · Problem statement">P20·1</a></li><li><a class="" href="../../../nova-brown-blog-writer/pages/nova-brown-solution/" title="Project 20 · Part 2 of 3 · Nova + Brown blog writer · Solution walkthrough">P20·2</a></li><li><a class="" href="../../../nova-brown-blog-writer/pages/nova-brown-run/" title="Project 20 · Part 3 of 3 · Nova + Brown blog writer · Simulated run">P20·3</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/" title="Project 21 · Part 1 of 3 · AI Tutor (agentic RAG) · Problem statement">P21·1</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-code/" title="Project 21 · Part 2 of 3 · AI Tutor (agentic RAG) · Code explainer">P21·2</a></li><li><a class="" href="../../../ai-tutor-agentic-rag/pages/ai-tutor-run/" title="Project 21 · Part 3 of 3 · AI Tutor (agentic RAG) · Simulated run">P21·3</a></li><li><a class="" href="../../../claimsense/" title="Project 22 · Part 1 of 2 · ClaimSense claims agent · Problem statement">P22·1</a></li><li><a class="" href="../../../claimsense/pages/claimsense-solution/" title="Project 22 · Part 2 of 2 · ClaimSense claims agent · Solution guide">P22·2</a></li><li><a class="" href="../../../mini-cursor/" title="Project 23 · Part 1 of 3 · Mini Cursor coding agent · Problem statement">P23·1</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-code/" title="Project 23 · Part 2 of 3 · Mini Cursor coding agent · Code explainer">P23·2</a></li><li><a class="" href="../../../mini-cursor/pages/mini-cursor-run/" title="Project 23 · Part 3 of 3 · Mini Cursor coding agent · Simulator">P23·3</a></li></ol><div class="awsq-files"><b>Project files</b><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">&lt;/&gt; Browse the code<small>GitHub</small></a><a class="awsq-fb" href="https://github.com/schneidenbach/master-dot-dev-codex-course-live/archive/refs/heads/master.zip">⬇ Download all<small>.zip from GitHub</small></a></div></div></div>
+<!-- /awsq:bottom -->
+  </main>
+</div>
+
+<footer class="foot">
+  <div class="foot-in">
+    <p><b>Live Auction House</b> follows <a href="https://master.dev/courses/fullstack-app-codex/" target="_blank" rel="noopener"><i>Build a Fullstack App with Codex</i></a>
+    by Spencer Schneidenbach on master.dev, and his public
+    <a href="https://github.com/schneidenbach/master-dot-dev-codex-course-live" target="_blank" rel="noopener">course repo</a>.
+    The explanations, prompts, simulators and quizzes on this page are our own; the code excerpts are from that repo, with links to the exact lines.</p>
+    <p class="muted">Previous / next: <a href="../live-auction-build/">← Part 2 of 3</a> · <a href="../../../../">AWS AI Capstone</a> · <a href="../../">Part 1 of 3</a></p>
+  </div>
+</footer>
+<script src="../../assets/js/f88dabf3c70aec22.js"></script>
+<script>
+document.querySelectorAll('.mobile-toc a').forEach(a => a.addEventListener('click', () => a.closest('details').open = false));
+</script>
+</body>
+</html>
